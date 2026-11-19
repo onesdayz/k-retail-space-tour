@@ -19,7 +19,7 @@ class ShelfProducts {
     }`;
     const fragment=`#version 300 es
     precision highp float;in vec3 wp,n;in vec4 local;in vec2 light;out vec4 pixel;
-    uniform sampler2D packages;uniform vec4 rect;uniform int family;
+    uniform sampler2D packages;uniform vec4 rect;uniform int family;uniform float glassTop;
     ${reflection}
     ${ceilingIllumination}
     void main(){
@@ -49,10 +49,16 @@ class ShelfProducts {
       vec3 halfDir=normalize(V+normalize(vec3(-.39,.28,.88)));
       float strip=pow(max(dot(N,halfDir),0.),mix(110.,22.,rough));
       c=mix(c,refl,gloss*(.065+.66*F))+vec3(1.,.95,.84)*strip*gloss*.19;
+      if(glassTop>0. && z<glassTop){
+        // Keep the printed front legible while exposed shoulders and sides reflect the shop.
+        float label=front*smoothstep(.15,.22,z)*(1.-smoothstep(glassTop*.72,glassTop*.83,z));
+        float bare=(1.-.93*label)*(1.-smoothstep(glassTop-.024,glassTop,z));
+        c=mix(c,c*(.79+.14*abs(dot(V,N)))+glassSpec(wp,N,V),bare);gloss=mix(gloss,.84,bare);
+      }
       pixel=vec4(displayLight(ceilingLight(c,wp,N,V,gloss),wp,N,V,gloss),1.);
     }`;
     this.program=createProgram(gl,vertex,fragment);
-    this.u=uniforms(gl,this.program,'eye right up forward focal room packages environment rect family lightField displayField');
+    this.u=uniforms(gl,this.program,'eye right up forward focal room packages environment rect family glassTop lightField displayField');
     gl.useProgram(this.program);gl.uniform1i(this.u.displayField,9);
     gl.uniform1i(this.u.environment,4);gl.uniform1i(this.u.packages,5);gl.uniform1i(this.u.lightField,6);
   }
@@ -117,6 +123,7 @@ class ShelfProducts {
         const lod=d<3.8?0:d<33?1:2;
         layers[lod].set(instance,counts[lod]++*10);
       }
+      gl.uniform1f(u.glassTop,sku.glassTop||0);
       gl.uniform4fv(u.rect,sku.rect);gl.uniform1i(u.family,sku.shape==='box'?1:['tube','tin','pump'].includes(sku.shape)?2:0);
       for(let i=0;i<3;i++){
         if(!counts[i])continue;const m=meshes[i];gl.bindVertexArray(m.vao);gl.bindBuffer(gl.ARRAY_BUFFER,m.instances);

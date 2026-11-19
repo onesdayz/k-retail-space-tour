@@ -36,6 +36,18 @@ vec3 reflected(vec3 p,vec3 n,float roughness){
 float fresnel(vec3 view,vec3 n,float f0){
   return f0+(1.-f0)*pow(1.-clamp(abs(dot(view,n)),0.,1.),5.);
 }
+// Window and ceiling reflections on polished dielectric surfaces.
+vec3 glassSpec(vec3 p,vec3 N,vec3 V){
+  vec3 ray=reflect(-V,N);
+  float ribbons=0.;
+  for(int i=0;i<2;i++){
+    vec3 toPanel=normalize(vec3(i==0?-.80:.62,i==0?-.48:.75,.39));
+    vec3 across=normalize(cross(toPanel,vec3(0.,0.,1.)));
+    float width=dot(ray,across),height=dot(ray,cross(across,toPanel));
+    ribbons+=max(dot(ray,toPanel),0.)*exp(-width*width*850.-height*height*6.);
+  }
+  return reflected(p,N,.075)*(.19+.65*fresnel(V,N,.04))+vec3(.92,.89,.80)*ribbons*.66;
+}
 float noise2(vec2 p){
   vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
   vec3 p3=fract(vec3(i.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);
@@ -205,7 +217,8 @@ class StoreRenderer {
     const fragment=`#version 300 es
     precision highp float;in vec3 wp,n;in vec2 st;in float ao;out vec4 pixel;
     uniform vec3 base;uniform vec4 rect;uniform int mode,finish;uniform float emission;
-    uniform sampler2D atlas,floorTex,ceilTex,lightmap,atelier,consultation;
+    uniform sampler2D atlas,floorTex,ceilTex,lightmap,atelier,consultation,backdrop;
+    uniform highp vec3 right,up;
     uniform vec4 contacts[12];
     ${reflection}
     ${ceilingIllumination}
@@ -219,6 +232,7 @@ class StoreRenderer {
                  mode==23?texture(atelier,printUV).rgb:texture(atlas,printUV).rgb;
         c=ink*(.90+.105*ao)*vec3(1.014,1.004,.985);
         c=mix(c,reflected(wp,N,.36),.025*fresnel(V,N,.28));
+        if(finish==6)c=c*.97+.19*glassSpec(wp,N,V);
       }else if(mode==2){
         c=texture(floorTex,vec2(plan.x,1.-plan.y)).rgb;
         vec3 r=reflected(wp,N,.31);
@@ -235,7 +249,7 @@ class StoreRenderer {
           float grain=noise2(wp.xy*160.)*.012+.014*sin(dot(floor(tile),vec2(7.67,13.2)));
           c=vec3(.76,.77,.76)*(.55+.61*illumination+grain-.073*(1.-min(seal.x,seal.y)));
           c=mix(c,r,.13*fresnel(V,N,.085));
-        }else if(room.x>10. && wp.x>9.7 && wp.x<12. && wp.y>6.8 && wp.y<18.){
+        }else if(room.x>10. && wp.x>9.7 && wp.x<12.2 && wp.y>6.8 && wp.y<18.9){
           // A narrow contact shadow joins each pedestal and recessed plinth to the baked floor.
           float shade=0.;
           for(int i=0;i<12;i++){
@@ -293,6 +307,17 @@ class StoreRenderer {
       else if(mode==17){c=vec3(1.,.94,.79);}
       else if(mode==18){
         c=mix(vec3(.51,.32,.18)*(.72+.24*ao),reflected(wp,N,.30)*vec3(1.,.81,.61),.26);
+      }else if(mode==36){
+        // Refract the opaque shelf, labels, wax and reeds already drawn behind the vessel.
+        if(dot(N,V)<=0.)discard;
+        vec2 screen=vec2(textureSize(backdrop,0));
+        float angle=abs(dot(N,V));
+        vec2 bend=vec2(dot(N,right),dot(N,up));
+        float thickness=.012/max(.30,distance(wp,eye));
+        vec2 uv=gl_FragCoord.xy/screen-bend*thickness*vec2(screen.y/screen.x,1.);
+        vec3 through=texture(backdrop,clamp(uv,.001,.999)).rgb;
+        vec3 absorption=mix(base*.45,base+.12,.32+.68*angle);
+        c=through*absorption*(.59+.18*angle)+base*.21+glassSpec(wp,N,V);
       }else if(mode==24 || mode==25 || mode==26){
         float diffuse=.78+.14*max(N.z,0.)+.105*max(dot(N,normalize(vec3(-.4,.26,.83))),0.);
         float roughness=mode==25?.62:mode==26?.24:.19;
@@ -330,16 +355,19 @@ class StoreRenderer {
         c=base*(.67+.14*N.z+.075*noise2(grain));
       }else if(mode==19){
         float rim=pow(1.-abs(dot(V,N)),2.);
-        c=mix(vec3(1.,.974,.866),vec3(.96,.827,.635),.57*rim+.12*(1.+N.z));
+        c=mix(vec3(1.,.974,.866),vec3(.96,.827,.635),.57*rim+.12*(1.+N.z))+.11*glassSpec(wp,N,V);
       }else if(mode==8||emission>2.){c=vec3(1.,.965,.854);}
-      else if(mode==9){c=mix(vec3(.78,.86,.84),reflected(wp,N,.055),.79);alpha=.11+.44*fresnel(V,N,.04);}
+      else if(mode==9){
+        c=mix(vec3(.72,.82,.80),reflected(wp,N,.06),.83)+.32*glassSpec(wp,N,V);
+        alpha=.12+.54*fresnel(V,N,.04);
+      }
       if(finish==4){
         vec3 irradiance=texture(lightmap,vec2(st.x,1.-st.y)).rgb;
         float light=dot(irradiance,vec3(.22,.70,.08))/max(.24,dot(base,vec3(.22,.70,.08)));
         c*=clamp(.43+.56*light,.51,1.03);
       }
       if(mode!=19 && mode!=13 && mode!=17 && mode!=8 && mode!=9 && emission<2.){
-        float gloss=(mode==14?.8:mode==10?.52:mode==2?.24:.12);
+        float gloss=(mode==36?.89:mode==14?.8:mode==10?.52:mode==2?.24:.12);
         if(mode==1||mode==23||mode==34){
           vec3 lit=ceilingLight(c,wp,N,V,.09);
           c=mix(c,displayLight(lit,wp,N,V,.09),.22);
@@ -349,9 +377,15 @@ class StoreRenderer {
     }`;
     this.program=createProgram(gl,vertex,fragment);
     this.u=uniforms(gl,this.program,'extent origin eye right up forward focal room base rect mode finish emission atlas floorTex ceilTex lightmap environment lightField displayField atelier consultation');
+    this.u.backdrop=gl.getUniformLocation(this.program,'backdrop');
     this.u.contacts=gl.getUniformLocation(this.program,'contacts[0]');
     gl.useProgram(this.program);
     ['atlas','floorTex','ceilTex','lightmap','environment'].forEach((key,i)=>gl.uniform1i(this.u[key],i));
+    gl.uniform1i(this.u.backdrop,11);
+    this.backdrop=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,this.backdrop);
+    for(const option of [gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER])gl.texParameteri(gl.TEXTURE_2D,option,gl.LINEAR);
+    for(const option of [gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D,option,gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB8,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,null);
     gl.uniform1i(this.u.lightField,6);gl.uniform1i(this.u.atelier,7);gl.uniform1i(this.u.consultation,8);gl.uniform1i(this.u.displayField,9);
     gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clearColor(.85,.85,.80,1);
     this.aniso=gl.getExtension('EXT_texture_filter_anisotropic');
@@ -380,7 +414,7 @@ class StoreRenderer {
       return tex;
     });
     let start=0;
-    for(const g of s.groups){g.start=start;start+=g.n;g.rgb=g.c.map(c=>Math.max(0,Math.min(1,1.055*Math.pow(c,1/2.4)-.055)));g.finishId=['matte','wood','metal','satin','baked','porcelain'].indexOf(g.finish);}
+    for(const g of s.groups){g.start=start;start+=g.n;g.rgb=g.c.map(c=>Math.max(0,Math.min(1,1.055*Math.pow(c,1/2.4)-.055)));g.finishId=['matte','wood','metal','satin','baked','porcelain','screen'].indexOf(g.finish);}
     const contacts=new Float32Array((s.floorContacts||[]).flat());
     return {vao,vbo,textures,contacts,merch:this.merch.prepare(s),glow:this.glow.prepare(s.ceilingLights)};
   }
@@ -391,19 +425,27 @@ class StoreRenderer {
     gl.viewport(0,0,w,h);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
     gpu.textures.forEach((tex,i)=>{gl.activeTexture(gl.TEXTURE0+i);gl.bindTexture(gl.TEXTURE_2D,tex);});
     const u=this.u;
-    const architecture=glass=>{
+    gl.activeTexture(gl.TEXTURE11);gl.bindTexture(gl.TEXTURE_2D,this.backdrop);
+    const architecture=pass=>{
       gl.useProgram(this.program);gl.bindVertexArray(gpu.vao);
       cameraUniforms(gl,u,cam,s,w,h);gl.uniform3fv(u.origin,s.origin);gl.uniform3fv(u.extent,s.extent);
       if(gpu.contacts.length)gl.uniform4fv(u.contacts,gpu.contacts);
       for(const g of s.groups){
-        if((g.m===9)!==glass)continue;
+        if((g.m===9?2:g.m===36?1:0)!==pass)continue;
         gl.uniform3fv(u.base,g.rgb);gl.uniform4fv(u.rect,g.rect||[0,0,1,1]);gl.uniform1i(u.mode,g.m);gl.uniform1i(u.finish,g.finishId);gl.uniform1f(u.emission,g.e);
         gl.drawArrays(gl.TRIANGLES,g.start,g.n);
       }
     };
-    architecture(false);
+    architecture(0);
     this.merch.draw(s,gpu.merch,cam,w,h);
+    gl.activeTexture(gl.TEXTURE11);gl.bindTexture(gl.TEXTURE_2D,this.backdrop);
+    if(this.backdropWidth!==w || this.backdropHeight!==h){
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB8,w,h,0,gl.RGB,gl.UNSIGNED_BYTE,null);
+      this.backdropWidth=w;this.backdropHeight=h;
+    }
+    gl.copyTexSubImage2D(gl.TEXTURE_2D,0,0,0,0,0,w,h);
+    architecture(1);
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
-    architecture(true);this.glow.draw(s,gpu.glow,cam,w,h);gl.depthMask(true);gl.disable(gl.BLEND);
+    architecture(2);this.glow.draw(s,gpu.glow,cam,w,h);gl.depthMask(true);gl.disable(gl.BLEND);
   }
 }
