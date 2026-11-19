@@ -42,12 +42,81 @@ float noise2(vec2 p){
   float a=fract((p3.x+p3.y)*p3.z);
   return .56*a+.44*sin(dot(p,vec2(.43,.67))+sin(p.y*.94));
 }`;
+// Baked visibility and incident light direction from the real pendants and track fixtures.
+// Four bilinear reads interpolate the two neighbouring height slices of the light field.
+const ceilingIllumination = `
+uniform sampler2D lightField;
+vec2 fieldUV(float slice,vec2 grid,vec2 cells) {
+  vec2 tile=vec2(mod(slice,7.),floor(slice/7.));
+  return (tile+(grid*(cells-1.)+.5)/cells)/vec2(7.,8.);
+}
+vec3 ceilingLight(vec3 c,vec3 p,vec3 N,vec3 V,float gloss){
+  float westEdge=room.x<10.?4.8:9.238;
+  float southEdge=room.x<10.?2.50:1.13;
+  vec3 lo=vec3(-.16,southEdge-.72,.025), hi=vec3(westEdge+.40,room.y+.06,3.035);
+  if(any(lessThan(p.xy,lo.xy))||any(greaterThan(p.xy,hi.xy))||p.z>3.05)return c;
+  float mask=(1.-smoothstep(westEdge-.07,hi.x,p.x))*smoothstep(lo.y,southEdge,p.y);
+  vec3 q=clamp((p+N*.036-lo)/(hi-lo),0.,1.);
+  float height=q.z*27.,level=floor(height);
+  vec2 cells=vec2(textureSize(lightField,0))/vec2(7.,8.);
+  vec2 a=fieldUV(level,q.xy,cells),b=fieldUV(min(level+1.,27.),q.xy,cells);
+  vec3 moment=mix(textureLod(lightField,a,0.).rgb,textureLod(lightField,b,0.).rgb,fract(height))*2.-1.;
+  vec2 light=mix(textureLod(lightField,a+vec2(0.,.5),0.).rg,textureLod(lightField,b+vec2(0.,.5),0.).rg,fract(height));
+  float energy=3.*light.x*light.x;
+  vec3 color=mix(vec3(.95,.985,1.),vec3(1.,.81,.57),light.y);
+  float diffuse=energy*(.12+.88*max(dot(N,moment),0.));
+  float spec=pow(max(dot(N,normalize(moment+V+.0001)),0.),mix(22.,72.,gloss));
+  vec3 lit=c*(.86+color*.46*diffuse)+color*(.041*diffuse+gloss*.21*spec*energy);
+  return mix(c,lit,mask);
+}`;
 function cameraUniforms(gl,u,camera,room,w,h){
   const rad=Math.PI/180,a=camera.yaw*rad,b=camera.pitch*rad;
   const c=Math.cos(a),s=Math.sin(a),cp=Math.cos(b),sp=Math.sin(b);
   gl.uniform3f(u.eye,camera.x,camera.y,1.58);
   gl.uniform3f(u.right,c,-s,0);gl.uniform3f(u.up,-s*sp,-c*sp,cp);gl.uniform3f(u.forward,s*cp,c*cp,sp);
   const fy=1/Math.tan(63*rad/2);gl.uniform2f(u.focal,fy*h/w,fy);gl.uniform2f(u.room,room.W,room.D);
+}
+// Depth-tested lens bloom. Each emitter uses its actual position and radius in metres.
+class CeilingGlow {
+  constructor(gl){
+    this.gl=gl;
+    const vertex=`#version 300 es
+      layout(location=0) in vec4 emitter;
+      layout(location=1) in float globe;
+      out vec2 uv;out vec3 tint;out float strength;
+      ${projection}
+      void main(){
+        vec2 corner=vec2((gl_VertexID==1||gl_VertexID==3)?1.:-1.,gl_VertexID>=2?1.:-1.);
+        vec3 toward=normalize(eye-emitter.xyz);
+        float size=emitter.w*mix(4.5,2.85,globe);
+        float facing=smoothstep(.08,.7,-toward.z);
+        strength=mix(.32*facing,.39,globe);
+        tint=mix(vec3(.88,.96,1.),vec3(1.,.80,.50),globe);
+        uv=corner;
+        gl_Position=project(emitter.xyz+toward*emitter.w*1.01+size*(right*corner.x+up*corner.y));
+      }`;
+    const fragment=`#version 300 es
+      precision mediump float;in vec2 uv;in vec3 tint;in float strength;out vec4 pixel;
+      void main(){float r2=dot(uv,uv);pixel=vec4(tint,strength*exp(-4.6*r2)*(1.-smoothstep(.54,1.,r2)));}`;
+    this.program=createProgram(gl,vertex,fragment);
+    this.u=uniforms(gl,this.program,'eye right up forward focal room');
+  }
+  prepare(lights){
+    const gl=this.gl,vao=gl.createVertexArray();gl.bindVertexArray(vao);
+    const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
+    const data=lights.flatMap(([x,y,z,r])=>[x,y,z,r,r>.08?1:0]);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW);
+    for(const [i,width,offset] of [[0,4,0],[1,1,16]]){
+      gl.enableVertexAttribArray(i);gl.vertexAttribPointer(i,width,gl.FLOAT,false,20,offset);gl.vertexAttribDivisor(i,1);
+    }
+    return {vao,buffer,count:lights.length};
+  }
+  draw(s,glow,cam,w,h){
+    const gl=this.gl;gl.useProgram(this.program);gl.bindVertexArray(glow.vao);
+    cameraUniforms(gl,this.u,cam,s,w,h);
+    gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP,0,4,glow.count);
+  }
 }
 class StoreRenderer {
   constructor(canvas) {
@@ -62,14 +131,16 @@ class StoreRenderer {
     const fragment=`#version 300 es
     precision highp float;in vec3 wp,n;in vec2 st;in float ao;out vec4 pixel;
     uniform vec3 base;uniform vec4 rect;uniform int mode,finish;uniform float emission;
-    uniform sampler2D atlas,floorTex,ceilTex,lightmap;
+    uniform sampler2D atlas,floorTex,ceilTex,lightmap,atelier;
     ${reflection}
+    ${ceilingIllumination}
     void main(){
       vec3 N=normalize(n),V=normalize(eye-wp);float alpha=1.;
       vec3 c=base*(.77+.13*N.z+.045*N.y-.03*N.x)*(.64+.39*sqrt(ao))*vec3(1.04,1.01,.97);
       vec2 plan=wp.xy/room;
-      if(mode==1){
-        vec3 ink=texture(atlas,rect.xy+vec2(st.x,1.-st.y)*rect.zw).rgb;
+      if(mode==1 || mode==23){
+        vec2 printUV=rect.xy+vec2(st.x,1.-st.y)*rect.zw;
+        vec3 ink=mode==23?texture(atelier,printUV).rgb:texture(atlas,printUV).rgb;
         c=ink*(.90+.105*ao)*vec3(1.014,1.004,.985);
         c=mix(c,reflected(wp,N,.36),.025*fresnel(V,N,.28));
       }else if(mode==2){
@@ -77,9 +148,7 @@ class StoreRenderer {
         vec3 r=reflected(wp,N,.31);
         c=mix(c,r,.22*fresnel(V,N,.055));
         // Porcelain under the beauty fixtures retains the baked shadows at the base of each shelf.
-        float zoneEdge=room.x<10.?4.8:9.238;
-        float zoneStart=room.x<10.?2.50:1.13;
-        if(wp.x<zoneEdge && wp.y>zoneStart){
+        if(finish==5){
           vec2 uv=vec2(plan.x,1.-plan.y);
           float illumination=dot(textureLod(floorTex,uv,2.6).rgb,vec3(.24,.67,.09));
           vec2 tile=wp.xy/vec2(.66,1.08);
@@ -139,6 +208,16 @@ class StoreRenderer {
       else if(mode==17){c=vec3(1.,.94,.79);}
       else if(mode==18){
         c=mix(vec3(.51,.32,.18)*(.72+.24*ao),reflected(wp,N,.30)*vec3(1.,.81,.61),.26);
+      }else if(mode==24 || mode==25 || mode==26){
+        float diffuse=.78+.14*max(N.z,0.)+.105*max(dot(N,normalize(vec3(-.4,.26,.83))),0.);
+        float roughness=mode==25?.62:mode==26?.24:.19;
+        vec3 env=reflected(wp,N,roughness);
+        float reflectivity=mode==25?.034:mode==26?.35:.14;
+        c=mix(base*diffuse,env*(mode==26?mix(vec3(1),base,.55):vec3(1)),reflectivity+.12*fresnel(V,N,.04));
+        if(mode==24)c+=vec3(.062)*pow(max(dot(N,normalize(V+vec3(-.4,.33,.84))),0.),38.);
+      }else if(mode==19){
+        float rim=pow(1.-abs(dot(V,N)),2.);
+        c=mix(vec3(1.,.974,.866),vec3(.96,.827,.635),.57*rim+.12*(1.+N.z));
       }else if(mode==8||emission>2.){c=vec3(1.,.965,.854);}
       else if(mode==9){c=mix(vec3(.78,.86,.84),reflected(wp,N,.055),.79);alpha=.11+.44*fresnel(V,N,.04);}
       if(finish==4){
@@ -146,15 +225,22 @@ class StoreRenderer {
         float light=dot(irradiance,vec3(.22,.70,.08))/max(.24,dot(base,vec3(.22,.70,.08)));
         c*=clamp(.43+.56*light,.51,1.03);
       }
+      if(mode!=19 && mode!=13 && mode!=17 && mode!=8 && mode!=9 && emission<2.){
+        float gloss=(mode==14?.8:mode==10?.52:mode==2?.24:.12);
+        if(mode==1||mode==23)c=mix(c,ceilingLight(c,wp,N,V,.09),.18);
+        else c=ceilingLight(c,wp,N,V,gloss);
+      }
       pixel=vec4(c,alpha);
     }`;
     this.program=createProgram(gl,vertex,fragment);
-    this.u=uniforms(gl,this.program,'extent origin eye right up forward focal room base rect mode finish emission atlas floorTex ceilTex lightmap environment');
+    this.u=uniforms(gl,this.program,'extent origin eye right up forward focal room base rect mode finish emission atlas floorTex ceilTex lightmap environment lightField atelier');
     gl.useProgram(this.program);
     ['atlas','floorTex','ceilTex','lightmap','environment'].forEach((key,i)=>gl.uniform1i(this.u[key],i));
+    gl.uniform1i(this.u.lightField,6);gl.uniform1i(this.u.atelier,7);
     gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clearColor(.85,.85,.80,1);
     this.aniso=gl.getExtension('EXT_texture_filter_anisotropic');
     this.merch=new ShelfProducts(gl);
+    this.glow=new CeilingGlow(gl);
   }
   async prepare(s){
     const gl=this.gl,packed=Uint8Array.from(atob(s.geo),c=>c.charCodeAt(0));
@@ -178,8 +264,8 @@ class StoreRenderer {
       return tex;
     });
     let start=0;
-    for(const g of s.groups){g.start=start;start+=g.n;g.rgb=g.c.map(c=>Math.max(0,Math.min(1,1.055*Math.pow(c,1/2.4)-.055)));g.finishId=['matte','wood','metal','satin','baked'].indexOf(g.finish);}
-    return {vao,vbo,textures,merch:this.merch.prepare(s)};
+    for(const g of s.groups){g.start=start;start+=g.n;g.rgb=g.c.map(c=>Math.max(0,Math.min(1,1.055*Math.pow(c,1/2.4)-.055)));g.finishId=['matte','wood','metal','satin','baked','porcelain'].indexOf(g.finish);}
+    return {vao,vbo,textures,merch:this.merch.prepare(s),glow:this.glow.prepare(s.ceilingLights)};
   }
   draw(s,gpu,cam){
     const gl=this.gl,cv=gl.canvas,scale=Math.min(devicePixelRatio||1,1.7,2100/Math.max(cv.clientWidth,cv.clientHeight,1));
@@ -200,6 +286,6 @@ class StoreRenderer {
     architecture(false);
     this.merch.draw(s,gpu.merch,cam,w,h);
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
-    architecture(true);gl.depthMask(true);gl.disable(gl.BLEND);
+    architecture(true);this.glow.draw(s,gpu.glow,cam,w,h);gl.depthMask(true);gl.disable(gl.BLEND);
   }
 }

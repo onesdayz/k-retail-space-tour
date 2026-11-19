@@ -2,8 +2,8 @@
 window.storeData={};
 const el=id=>document.getElementById(id);
 const view=el('view'),map=el('map'),statusBox=el('load');
-const names=['입구','올리브영','중소 브랜드 A–D','종근당건강','WZ바이오','결제·포장'];
-const colors=['#617363','#66883d','#ae8b6c','#d5a53b','#354d86','#998a73'];
+const names=['입구','올리브영','중소 브랜드 A–D','종근당건강','WZ바이오','결제·포장','공용 체험·기획전'];
+const colors=['#617363','#66883d','#ae8b6c','#d5a53b','#354d86','#998a73','#9a7154'];
 const rad=Math.PI/180, clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 let area=100,scene=null,gpu=null,renderer=null,generation=0,active=-1,loading=false;
 let cam={x:0,y:0,yaw:0,pitch:0},frame=0,dirty=false,last=0,tourTime=0,playing=false;
@@ -13,10 +13,12 @@ const stopButtons=names.map((name,i)=>{
   const button=document.createElement('button'),dot=document.createElement('i');dot.style.setProperty('--color',colors[i]);
   button.append(dot,document.createTextNode(name));button.onclick=()=>jump(i);nav.append(button);return button;
 });
+const experienceIndex=names.indexOf('공용 체험·기획전');
+stopButtons[0].after(stopButtons[experienceIndex]);
 function message(text){statusBox.hidden=!text;statusBox.textContent=text;}
 function readAsset(id){
   if(window.storeData[id])return Promise.resolve(window.storeData[id]);
-  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=4';
+  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=5';
     js.onload=()=>resolve(window.storeData[id]);js.onerror=()=>{js.remove();reject(Error('매장 자료를 열 수 없습니다. 페이지를 새로고침해 주세요.'));};document.head.append(js);});
 }
 async function openArea(id){
@@ -24,7 +26,7 @@ async function openArea(id){
   const token=++generation;area=id;loading=true;stopTour();resetInput();scene=null;
   document.querySelectorAll('[data-area]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.area===id)));
   el('sizeLabel').textContent=id+'㎡';el('where').textContent='입구';el('tour').disabled=true;
-  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=4)';
+  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=5)';
   view.style.visibility='hidden';message('매장을 여는 중…');closeGuide();
   try{
     if(!renderer)renderer=new StoreRenderer(view);
@@ -56,12 +58,18 @@ function setStop(i){if(i===active)return;active=i;el('where').textContent=names[
 function nearestIndex(arr,xy){let best=Infinity,index=0;arr.forEach((p,i)=>{const d=(p[0]-xy.x)**2+(p[1]-xy.y)**2;if(d<best){best=d;index=i;}});return index;}
 function zone(){
   // The two parallel aisles belong to different sides of the same loop.
+  const [ex,ey]=scene.experienceView;
+  if(Math.hypot(cam.x-ex,cam.y-ey)<.85){setStop(experienceIndex);return;}
   const t=nearestIndex(scene.route,cam)/5;
   const breaks=area===100?[7,22,33,39.5,45]:[13,32,42.5,50.5,58];
   setStop(breaks.filter(b=>t>=b).length);
 }
 function jump(i){
-  if(!scene)return;stopTour();resetInput();tourTime=scene.stops[i];const [x,y,yaw,pitch]=scene.route[Math.round(tourTime*5)];
+  if(!scene)return;stopTour();resetInput();
+  const customView=i===experienceIndex?scene.experienceView:i===5?scene.checkoutView:null;
+  const pose=customView||scene.route[Math.round(scene.stops[i]*5)];
+  const [x,y,yaw,pitch]=pose;
+  tourTime=i===experienceIndex?nearestIndex(scene.route,{x,y})/5:scene.stops[i];
   const [sx,sy]=nearestSafe(x,y);cam={x:sx,y:sy,yaw,pitch};setStop(i);closeGuide();requestRender();
 }
 function stopTour(){

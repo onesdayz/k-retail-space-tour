@@ -21,6 +21,7 @@ class ShelfProducts {
     precision highp float;in vec3 wp,n;in vec4 local;in vec2 light;out vec4 pixel;
     uniform sampler2D packages;uniform vec4 rect;uniform int family;
     ${reflection}
+    ${ceilingIllumination}
     void main(){
       vec3 N=normalize(n),V=normalize(eye-wp);
       float u=clamp(local.x,.01,.99),z=clamp(local.y,.002,.998);
@@ -48,11 +49,11 @@ class ShelfProducts {
       vec3 halfDir=normalize(V+normalize(vec3(-.39,.28,.88)));
       float strip=pow(max(dot(N,halfDir),0.),mix(110.,22.,rough));
       c=mix(c,refl,gloss*(.065+.66*F))+vec3(1.,.95,.84)*strip*gloss*.19;
-      pixel=vec4(c,1.);
+      pixel=vec4(ceilingLight(c,wp,N,V,gloss),1.);
     }`;
     this.program=createProgram(gl,vertex,fragment);
-    this.u=uniforms(gl,this.program,'eye right up forward focal room packages environment rect family');
-    gl.useProgram(this.program);gl.uniform1i(this.u.environment,4);gl.uniform1i(this.u.packages,5);
+    this.u=uniforms(gl,this.program,'eye right up forward focal room packages environment rect family lightField');
+    gl.useProgram(this.program);gl.uniform1i(this.u.environment,4);gl.uniform1i(this.u.packages,5);gl.uniform1i(this.u.lightField,6);
   }
   mesh(shape,profile,lod){
     const gl=this.gl,key=shape+lod;
