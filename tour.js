@@ -266,7 +266,8 @@ view.onpointermove=e=>{
     const before=Math.hypot(old.x-other.x,old.y-other.y),after=Math.hypot(next.x-other.x,next.y-other.y);
     if(before>2 && after>2)setZoom(zoom*after/before);
   }else{
-    lookBy((next.x-old.x)*.22,-(next.y-old.y)*.18);
+    const direction=e.pointerType==='touch'?-1:1;
+    lookBy((next.x-old.x)*.22*direction,(old.y-next.y)*.18*direction);
     requestRender();
   }
   pointers.set(e.pointerId,next);
