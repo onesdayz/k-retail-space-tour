@@ -23,7 +23,7 @@ stopButtons[0].after(stopButtons[experienceIndex]);
 function message(text){statusBox.hidden=!text;statusBox.textContent=text;}
 function readAsset(id){
   if(window.storeData[id])return Promise.resolve(window.storeData[id]);
-  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=15';
+  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=16';
     js.onload=()=>resolve(window.storeData[id]);js.onerror=()=>{js.remove();reject(Error('매장 자료를 열 수 없습니다. 페이지를 새로고침해 주세요.'));};document.head.append(js);});
 }
 const planLink=el('planFile');
@@ -39,7 +39,7 @@ async function openArea(id){
   planLink.download=floorPlans[id].filename;
   planLink.querySelector('span').textContent=id+'㎡ 배치도 PDF';
   el('sizeLabel').textContent=id+'㎡';el('where').textContent='입구';el('tour').disabled=true;
-  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=15)';
+  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=16)';
   view.style.visibility='hidden';message('매장을 여는 중…');closeGuide();
   try{
     if(!renderer)renderer=new StoreRenderer(view);
@@ -301,46 +301,35 @@ function clearStick(){
   knob.style.transform='';stick.removeAttribute('data-active');
   if(id!==null && stick.hasPointerCapture(id))stick.releasePointerCapture(id);
 }
-function insideStick(e){
-  const b=stick.getBoundingClientRect();
-  return Math.hypot((e.clientX-b.left)/b.width-.5,(e.clientY-b.top)/b.height-.5)<=.5;
-}
 function dragStick(e){
-  const b=stick.getBoundingClientRect();
-  steer((e.clientX-b.left-b.width/2)/(b.width*.35),(b.top+b.height/2-e.clientY)/(b.height*.35));
+  const b=stickPress.bounds;
+  const x=(e.clientX-b.left-b.width/2)/(b.width*.35);
+  const y=(b.top+b.height/2-e.clientY)/(b.height*.35);
+  // Keep the last heading while crossing the centre of the pad.
+  if(Math.hypot(x,y)>=.12)steer(x,y);
 }
 stick.onpointerdown=e=>{
   if(!scene||joy!==null||e.button!==0)return;
   if(e.pointerType==='touch')e.preventDefault();
   joy=e.pointerId;stick.setPointerCapture(joy);
   const key=e.target.closest('[data-move]')?.dataset.move;
-  stickPress={key,x:e.clientX,y:e.clientY,t:performance.now(),bounds:stick.getBoundingClientRect()};
+  stickPress={key,t:performance.now(),bounds:stick.getBoundingClientRect()};
   if(key)steer(...directions[key]);else dragStick(e);
 };
 stick.oncontextmenu=e=>e.preventDefault();
 stick.onpointermove=e=>{
   if(joy!==e.pointerId||!stickPress)return;
-  // A finger pad can drift beyond the painted chevron during a sustained press.
-  if(e.pointerType==='touch'&&stickPress.key){
-    const b=stickPress.bounds,margin=18;
-    if(e.clientX<b.left-margin||e.clientX>b.right+margin||e.clientY<b.top-margin||e.clientY>b.bottom+margin){
-      clearStick();return;
-    }
-    if(Math.hypot(e.clientX-stickPress.x,e.clientY-stickPress.y)>b.width*.24){
-      const next=document.elementFromPoint(e.clientX,e.clientY)?.closest('#stick [data-move]')?.dataset.move;
-      if(next&&next!==stickPress.key){
-        stickPress.key=next;stickPress.x=e.clientX;stickPress.y=e.clientY;steer(...directions[next]);
-      }
-    }
-    return;
+  if(!stickPress.key){dragStick(e);return;}
+  // Capture keeps the pressed arrow active anywhere on screen. Passing directly
+  // over a different arrow lets the visitor steer without lifting their finger.
+  const next=document.elementFromPoint(e.clientX,e.clientY)?.closest('#stick [data-move]')?.dataset.move;
+  if(next&&next!==stickPress.key){
+    stickPress.key=next;steer(...directions[next]);
   }
-  if(!insideStick(e)){clearStick();return;}
-  if(stickPress.key && Math.hypot(e.clientX-stickPress.x,e.clientY-stickPress.y)<5)return;
-  stickPress.key=null;dragStick(e);
 };
 function releaseStick(e){
   if(joy!==e.pointerId)return;
-  if(e.type==='pointerup' && stickPress?.key && insideStick(e)){
+  if(e.type==='pointerup' && stickPress?.key){
     const remaining=.16-(performance.now()-stickPress.t)/1000;
     if(remaining>0)tapDirection(stickPress.key,remaining);
   }
