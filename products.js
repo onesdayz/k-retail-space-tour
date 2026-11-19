@@ -49,11 +49,12 @@ class ShelfProducts {
       vec3 halfDir=normalize(V+normalize(vec3(-.39,.28,.88)));
       float strip=pow(max(dot(N,halfDir),0.),mix(110.,22.,rough));
       c=mix(c,refl,gloss*(.065+.66*F))+vec3(1.,.95,.84)*strip*gloss*.19;
-      pixel=vec4(ceilingLight(c,wp,N,V,gloss),1.);
+      pixel=vec4(displayLight(ceilingLight(c,wp,N,V,gloss),wp,N,V,gloss),1.);
     }`;
     this.program=createProgram(gl,vertex,fragment);
-    this.u=uniforms(gl,this.program,'eye right up forward focal room packages environment rect family lightField');
-    gl.useProgram(this.program);gl.uniform1i(this.u.environment,4);gl.uniform1i(this.u.packages,5);gl.uniform1i(this.u.lightField,6);
+    this.u=uniforms(gl,this.program,'eye right up forward focal room packages environment rect family lightField displayField');
+    gl.useProgram(this.program);gl.uniform1i(this.u.displayField,9);
+    gl.uniform1i(this.u.environment,4);gl.uniform1i(this.u.packages,5);gl.uniform1i(this.u.lightField,6);
   }
   mesh(shape,profile,lod){
     const gl=this.gl,key=shape+lod;

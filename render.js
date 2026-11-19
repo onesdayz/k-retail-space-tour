@@ -45,7 +45,7 @@ float noise2(vec2 p){
 // Baked visibility and incident light direction from the real pendants and track fixtures.
 // Four bilinear reads interpolate the two neighbouring height slices of the light field.
 const ceilingIllumination = `
-uniform sampler2D lightField;
+uniform sampler2D lightField,displayField;
 vec2 fieldUV(float slice,vec2 grid,vec2 cells) {
   vec2 tile=vec2(mod(slice,7.),floor(slice/7.));
   return (tile+(grid*(cells-1.)+.5)/cells)/vec2(7.,8.);
@@ -68,6 +68,27 @@ vec3 ceilingLight(vec3 c,vec3 p,vec3 N,vec3 V,float gloss){
   float spec=pow(max(dot(N,normalize(moment+V+.0001)),0.),mix(22.,72.,gloss));
   vec3 lit=c*(.86+color*.46*diffuse)+color*(.041*diffuse+gloss*.21*spec*energy);
   return mix(c,lit,mask);
+}
+vec2 displayUV(float slice,vec2 xy,vec2 cells){
+  return (vec2(mod(slice,6.),floor(slice/6.))+(xy*(cells-1.)+.5)/cells)/vec2(6.,8.);
+}
+vec3 displayLight(vec3 c,vec3 p,vec3 N,vec3 V,float gloss){
+  vec3 q=p+N*.014;
+  vec2 xy=clamp(q.xy/room,0.,1.);
+  float z=47.*clamp(q.z/3.10,0.,1.),k=floor(z);
+  vec2 cells=vec2(textureSize(displayField,0))/vec2(6.,8.);
+  vec3 field=mix(textureLod(displayField,displayUV(k,xy,cells),0.).rgb,
+                 textureLod(displayField,displayUV(min(k+1.,47.),xy,cells),0.).rgb,fract(z));
+  vec2 horizontal=field.gb*2.-1.;
+  vec3 L=normalize(vec3(horizontal,sqrt(max(.035,1.-dot(horizontal,horizontal)))));
+  vec3 tint=mix(vec3(.98,.99,1.),vec3(1.,.936,.836),smoothstep(.46,.77,xy.x));
+  float illuminance=2.*field.r;
+  float diffuse=.14+.86*max(dot(N,L),0.);
+  float specular=pow(max(dot(N,normalize(V+L+.0001)),0.),32.)*gloss;
+  // Keep white cartons and printed lettering detailed as the bounce lifts the midtones.
+  vec3 headroom=max(vec3(0.),1.-clamp(c,0.,1.));
+  vec3 fill=(.057+.026*max(N.z,0.))*vec3(1.,.979,.942);
+  return c+headroom*((.09+c)*fill+tint*illuminance*((.105+.78*c)*diffuse+.085*specular));
 }`;
 function cameraUniforms(gl,u,camera,room,w,h){
   const rad=Math.PI/180,a=camera.yaw*rad,b=camera.pitch*rad;
@@ -266,17 +287,19 @@ class StoreRenderer {
       }
       if(mode!=19 && mode!=13 && mode!=17 && mode!=8 && mode!=9 && emission<2.){
         float gloss=(mode==14?.8:mode==10?.52:mode==2?.24:.12);
-        if(mode==1||mode==23)c=mix(c,ceilingLight(c,wp,N,V,.09),.18);
-        else c=ceilingLight(c,wp,N,V,gloss);
+        if(mode==1||mode==23||mode==34){
+          vec3 lit=ceilingLight(c,wp,N,V,.09);
+          c=mix(c,displayLight(lit,wp,N,V,.09),.22);
+        }else c=displayLight(ceilingLight(c,wp,N,V,gloss),wp,N,V,gloss);
       }
       pixel=vec4(c,alpha);
     }`;
     this.program=createProgram(gl,vertex,fragment);
-    this.u=uniforms(gl,this.program,'extent origin eye right up forward focal room base rect mode finish emission atlas floorTex ceilTex lightmap environment lightField atelier consultation');
+    this.u=uniforms(gl,this.program,'extent origin eye right up forward focal room base rect mode finish emission atlas floorTex ceilTex lightmap environment lightField displayField atelier consultation');
     this.u.contacts=gl.getUniformLocation(this.program,'contacts[0]');
     gl.useProgram(this.program);
     ['atlas','floorTex','ceilTex','lightmap','environment'].forEach((key,i)=>gl.uniform1i(this.u[key],i));
-    gl.uniform1i(this.u.lightField,6);gl.uniform1i(this.u.atelier,7);gl.uniform1i(this.u.consultation,8);
+    gl.uniform1i(this.u.lightField,6);gl.uniform1i(this.u.atelier,7);gl.uniform1i(this.u.consultation,8);gl.uniform1i(this.u.displayField,9);
     gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clearColor(.85,.85,.80,1);
     this.aniso=gl.getExtension('EXT_texture_filter_anisotropic');
     this.merch=new ShelfProducts(gl);

@@ -21,7 +21,7 @@ header{height:76px;flex:none;display:flex;align-items:center;gap:20px;padding:0 
 .areas button[aria-pressed=true],.play button[aria-pressed=true],dialog button{background:var(--yellow);color:var(--ink)}
 .utility{width:34px;height:34px;border:1px solid var(--line);border-radius:50%;font-weight:700;color:var(--yellow)}
 main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) clamp(244px,22vw,310px)}
-.viewer{position:relative;min-width:0;overflow:hidden;background:#292824 url(assets/entrance-100.webp?v=8) center/cover}
+.viewer{position:relative;min-width:0;overflow:hidden;background:#292824 url(assets/entrance-100.webp?v=9) center/cover}
 .viewer:after{content:"";pointer-events:none;position:absolute;inset:65% 0 0;background:linear-gradient(transparent,#10101377)}
 #view{display:block;width:100%;height:100%;touch-action:none;cursor:grab}#view:active{cursor:grabbing}
 .tools,.zoom,.place,.play,#stick{position:absolute;z-index:1}
@@ -32,13 +32,13 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) clamp(
 .zoom{right:16px;top:50%;transform:translateY(-50%);display:grid;justify-items:center;border-radius:12px;overflow:hidden}
 .zoom button{width:42px;height:39px;font:bold 24px/1 system-ui;color:var(--yellow)}
 .zoom output{font-size:10px;line-height:16px;font-variant-numeric:tabular-nums;color:var(--muted);pointer-events:none}
-.tools button:hover,.zoom button:not(:disabled):hover,#stick button:hover{background:#373431}
+.tools button:hover,.zoom button:not(:disabled):hover{background:#373431}
 .place{pointer-events:none;left:146px;bottom:27px;color:white;text-shadow:0 1px 5px #000b}.place span{font-size:14px;font-weight:650}
 .place h2{font-size:clamp(26px,3.1vw,44px);margin:3px 0 0;line-height:1.15;letter-spacing:-.07em}
 .play{bottom:26px;right:16px}.play button{min-height:43px;padding:0 16px;border-radius:22px;display:flex;align-items:center;gap:8px;font-size:14px;font-weight:650}
 #playIcon{color:var(--yellow);font-size:13px}.play button[aria-pressed=true] #playIcon{color:var(--ink)}
 #stick{bottom:16px;left:16px;width:110px;height:110px;border-radius:50%;touch-action:none;user-select:none;-webkit-user-select:none}
-#stick button{display:grid;place-items:center;position:absolute;padding:0;border-radius:10px;touch-action:none}
+#stick button{display:grid;place-items:center;position:absolute;padding:0;border-radius:10px;touch-action:none;-webkit-tap-highlight-color:transparent}
 #stick button::before{content:"";width:10px;height:10px;border:solid var(--yellow);border-width:2.4px 2.4px 0 0;transform:rotate(var(--angle));pointer-events:none}
 #stick [data-move=up],#stick [data-move=down]{width:38%;height:33%;left:31%}
 #stick [data-move=left],#stick [data-move=right]{height:38%;width:33%;top:31%}
@@ -79,4 +79,13 @@ dialog::backdrop{background:#09090bbd}dialog p{font-size:15px;line-height:1.6}di
 @media(max-height:580px){header{height:50px}aside{padding:10px 16px}.guideHead h2{font-size:17px}.planbox{margin:6px 0}#stops{gap:0}#stops button{padding:5px 10px;min-height:30px}footer{height:26px}#stick{width:90px;height:90px;bottom:10px}}
 @media(max-height:470px){.planbox{padding:5px 8px;margin:4px 0}.legend{margin:3px 0 0}#map{height:clamp(42px,19dvh,94px)}.zoom button{height:31px}}
 
-#planFile:not([hidden]){display:block;width:fit-content;color:var(--yellow);font-size:12px;margin:7px auto 0;text-underline-offset:3px}
+#planFile:not([hidden]){
+  display:flex;align-items:center;justify-content:center;gap:8px;width:fit-content;
+  min-height:44px;max-width:100%;margin:9px auto 0;padding:0 17px;
+  border:1px solid var(--gold);border-radius:999px;background:#2b251a;color:var(--yellow);
+  font-size:13px;font-weight:700;text-decoration:none;
+}
+#planFile svg{width:16px;height:16px;flex:none}
+@media(hover:hover){#planFile:hover{background:#403421;border-color:var(--yellow)}}
+#planFile:active{background:#4d3d24}
+@media(max-height:470px){#planFile:not([hidden]){margin-top:4px}}

@@ -22,7 +22,7 @@ stopButtons[0].after(stopButtons[experienceIndex]);
 function message(text){statusBox.hidden=!text;statusBox.textContent=text;}
 function readAsset(id){
   if(window.storeData[id])return Promise.resolve(window.storeData[id]);
-  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=8';
+  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=9';
     js.onload=()=>resolve(window.storeData[id]);js.onerror=()=>{js.remove();reject(Error('매장 자료를 열 수 없습니다. 페이지를 새로고침해 주세요.'));};document.head.append(js);});
 }
 async function openArea(id){
@@ -30,7 +30,7 @@ async function openArea(id){
   const token=++generation;area=id;loading=true;stopTour();resetInput();scene=null;
   document.querySelectorAll('[data-area]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.area===id)));
   el('planFile').hidden=id!==300;el('sizeLabel').textContent=id+'㎡';el('where').textContent='입구';el('tour').disabled=true;
-  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=8)';
+  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=9)';
   view.style.visibility='hidden';message('매장을 여는 중…');closeGuide();
   try{
     if(!renderer)renderer=new StoreRenderer(view);
@@ -84,7 +84,7 @@ function manual(){
   if(playing){stopTour();[cam.x,cam.y]=nearestSafe(cam.x,cam.y);}
   tourTime=nearestIndex(scene.route,cam)/5;
 }
-function resetInput(){keyset.clear();pointers.clear();stickPress=null;joy=null;axis={x:0,y:0};el('stick').querySelector('i').style.transform='';el('stick').removeAttribute('data-active');}
+function resetInput(){keyset.clear();pointers.clear();clearStick();}
 function closeGuide(){document.body.classList.remove('panel');el('mapToggle').setAttribute('aria-expanded','false');}
 function requestRender(){dirty=true;if(!frame)frame=requestAnimationFrame(tick);}
 function tick(ts){
@@ -109,11 +109,13 @@ function tick(ts){
   if(playing||keyset.size||axis.x||axis.y)frame=requestAnimationFrame(tick);else last=0;
 }
 function makeOverview(){
-  const [w,h]=scene.grid;overview=document.createElement('canvas');overview.width=w;overview.height=h;
+  const [w,h,d]=scene.grid;overview=document.createElement('canvas');overview.width=w;overview.height=h;
   const ctx=overview.getContext('2d'),pic=ctx.createImageData(w,h);
   for(let y=0;y<h;y++)for(let x=0;x<w;x++){
     const occupied=scene.fixtures[y*w+x],oy=x/w<(area===100?.6:.666);
-    const rgb=occupied?(oy?[140,135,122]:[159,145,119]):(oy?[56,56,57]:[64,61,56]);
+    const mx=(x+.5)*d,my=(y+.5)*d;
+    const tile=scene.displayFloors?.some(([l,b,r,t])=>mx>=l&&mx<=r&&my>=b&&my<=t);
+    const rgb=occupied?(oy?[140,135,122]:[159,145,119]):tile?[84,80,70]:(oy?[56,56,57]:[64,61,56]);
     const i=((h-1-y)*w+x)*4;pic.data.set([...rgb,255],i);
   }ctx.putImageData(pic,0,0);
 }
@@ -125,6 +127,8 @@ function drawMap(){
   const s=Math.min((w-14)/scene.W,(h-10)/scene.D),x=(w-scene.W*s)/2,y=(h-scene.D*s)/2;
   mapLayout={s,x,y};const mx=v=>x+v*s,my=v=>y+(scene.D-v)*s;
   ctx.drawImage(overview,x,y,scene.W*s,scene.D*s);ctx.strokeStyle='#a69a7b';ctx.lineWidth=1.3;ctx.strokeRect(x,y,scene.W*s,scene.D*s);
+  ctx.strokeStyle='#9c8860';ctx.lineWidth=.8;
+  for(const [l,b,r,t] of scene.displayFloors||[])ctx.strokeRect(mx(l),my(t),(r-l)*s,(t-b)*s);
   ctx.beginPath();ctx.setLineDash([3,3]);ctx.lineWidth=1.5;ctx.strokeStyle='#e1ba63';
   scene.route.forEach((p,i)=>{if(i===0)ctx.moveTo(mx(p[0]),my(p[1]));else ctx.lineTo(mx(p[0]),my(p[1]));});ctx.stroke();ctx.setLineDash([]);
   ctx.save();ctx.translate(mx(cam.x),my(cam.y));ctx.rotate(cam.yaw*rad);ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,17,-2.12,-1.02);ctx.closePath();ctx.fillStyle='#e8ba5463';ctx.fill();
@@ -206,8 +210,19 @@ function walk(side,forward,distance){
 function steer(x,y){
   const d=Math.max(1,Math.hypot(x,y));axis={x:x/d,y:y/d};
   knob.style.transform='translate('+axis.x*10+'px,'+(-axis.y*10)+'px)';
-  stick.dataset.active=Math.abs(axis.x)>Math.abs(axis.y)?(axis.x>0?'right':'left'):(axis.y>0?'up':'down');
+  if(Math.hypot(x,y)<.12){axis={x:0,y:0};knob.style.transform='';stick.removeAttribute('data-active');}
+  else stick.dataset.active=Math.abs(axis.x)>Math.abs(axis.y)?(axis.x>0?'right':'left'):(axis.y>0?'up':'down');
   requestRender();
+}
+function clearStick(){
+  const id=joy;
+  joy=null;stickPress=null;axis={x:0,y:0};
+  knob.style.transform='';stick.removeAttribute('data-active');
+  if(id!==null && stick.hasPointerCapture(id))stick.releasePointerCapture(id);
+}
+function insideStick(e){
+  const b=stick.getBoundingClientRect();
+  return Math.hypot((e.clientX-b.left)/b.width-.5,(e.clientY-b.top)/b.height-.5)<=.5;
 }
 function dragStick(e){
   const b=stick.getBoundingClientRect();
@@ -222,16 +237,17 @@ stick.onpointerdown=e=>{
 };
 stick.onpointermove=e=>{
   if(joy!==e.pointerId||!stickPress)return;
+  if(!insideStick(e)){clearStick();return;}
   if(stickPress.key && Math.hypot(e.clientX-stickPress.x,e.clientY-stickPress.y)<5)return;
   stickPress.key=null;dragStick(e);
 };
 function releaseStick(e){
   if(joy!==e.pointerId)return;
-  if(e.type==='pointerup' && stickPress?.key){
+  if(e.type==='pointerup' && stickPress?.key && insideStick(e)){
     const remaining=.16-(performance.now()-stickPress.t)/1000;
     if(remaining>0)walk(...directions[stickPress.key],remaining*1.55);
   }
-  joy=null;stickPress=null;axis={x:0,y:0};knob.style.transform='';stick.removeAttribute('data-active');requestRender();
+  clearStick();requestRender();
 }
 stick.onpointerup=stick.onpointercancel=stick.onlostpointercapture=releaseStick;
 stick.onclick=e=>{
