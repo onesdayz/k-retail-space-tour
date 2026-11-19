@@ -16,7 +16,7 @@ const stopButtons=names.map((name,i)=>{
 function message(text){statusBox.hidden=!text;statusBox.textContent=text;}
 function readAsset(id){
   if(window.storeData[id])return Promise.resolve(window.storeData[id]);
-  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js';
+  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=3';
     js.onload=()=>resolve(window.storeData[id]);js.onerror=()=>{js.remove();reject(Error('매장 자료를 열 수 없습니다. 페이지를 새로고침해 주세요.'));};document.head.append(js);});
 }
 async function openArea(id){
@@ -24,7 +24,7 @@ async function openArea(id){
   const token=++generation;area=id;loading=true;stopTour();resetInput();scene=null;
   document.querySelectorAll('[data-area]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.area===id)));
   el('sizeLabel').textContent=id+'㎡';el('where').textContent='입구';el('tour').disabled=true;
-  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp)';
+  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=3)';
   view.style.visibility='hidden';message('매장을 여는 중…');closeGuide();
   try{
     if(!renderer)renderer=new StoreRenderer(view);
@@ -134,6 +134,14 @@ el('tour').onclick=()=>{
 document.querySelectorAll('[data-area]').forEach(b=>b.onclick=()=>{if(+b.dataset.area!==area||!scene)openArea(+b.dataset.area);});
 el('mapToggle').onclick=()=>{const show=document.body.classList.toggle('panel');el('mapToggle').setAttribute('aria-expanded',String(show));requestRender();};
 el('closeGuide').onclick=closeGuide;
+const compactHeader=matchMedia('(max-width:760px)');
+function positionHelp(){
+  const helpButton=el('help');
+  if(compactHeader.matches)el('mapToggle').before(helpButton);
+  else document.querySelector('header').append(helpButton);
+}
+positionHelp();
+compactHeader.addEventListener('change',()=>{positionHelp();closeGuide();requestRender();});
 const help=el('instructions');el('help').onclick=()=>{resetInput();if(playing)manual();help.showModal();};
 el('dismiss').onclick=()=>help.close();
 const fs=el('full');if(!document.documentElement.requestFullscreen)fs.hidden=true;
