@@ -36,9 +36,25 @@ function syncMusicButton(){
   musicToggle.setAttribute('aria-pressed',String(on));
   musicToggle.title=on?'배경음 끄기':'배경음 켜기';
 }
+let pageAway=false,resumeMusic=false;
 function startMusic(){
-  lounge.play().catch(syncMusicButton);
+  if(musicEnabled&&!document.hidden&&!pageAway)lounge.play().catch(syncMusicButton);
 }
+function updateMusicVisibility(){
+  if(document.hidden||pageAway){
+    if(!lounge.paused){
+      resumeMusic=musicEnabled;
+      lounge.pause();
+    }
+  }else if(resumeMusic){
+    resumeMusic=false;
+    startMusic();
+  }
+}
+document.addEventListener('visibilitychange',updateMusicVisibility);
+window.addEventListener('pagehide',()=>{pageAway=true;updateMusicVisibility();});
+window.addEventListener('pageshow',()=>{pageAway=false;updateMusicVisibility();});
+lounge.addEventListener('play',()=>{if(document.hidden||pageAway)updateMusicVisibility();});
 function clearMusicUnlock(){
   document.removeEventListener('click',unlockMusic);
   document.removeEventListener('keyup',unlockMusic);
@@ -54,6 +70,7 @@ lounge.addEventListener('pause',syncMusicButton);
 lounge.addEventListener('error',syncMusicButton);
 musicToggle.onclick=()=>{
   clearMusicUnlock();
+  resumeMusic=false;
   musicEnabled=lounge.paused;
   try{localStorage.setItem(musicPreference,musicEnabled?'on':'off');}catch{}
   if(musicEnabled)startMusic();else lounge.pause();
