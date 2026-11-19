@@ -23,7 +23,7 @@ stopButtons[0].after(stopButtons[experienceIndex]);
 function message(text){statusBox.hidden=!text;statusBox.textContent=text;}
 function readAsset(id){
   if(window.storeData[id])return Promise.resolve(window.storeData[id]);
-  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=12';
+  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=15';
     js.onload=()=>resolve(window.storeData[id]);js.onerror=()=>{js.remove();reject(Error('매장 자료를 열 수 없습니다. 페이지를 새로고침해 주세요.'));};document.head.append(js);});
 }
 const planLink=el('planFile');
@@ -39,16 +39,28 @@ async function openArea(id){
   planLink.download=floorPlans[id].filename;
   planLink.querySelector('span').textContent=id+'㎡ 배치도 PDF';
   el('sizeLabel').textContent=id+'㎡';el('where').textContent='입구';el('tour').disabled=true;
-  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=12)';
+  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=15)';
   view.style.visibility='hidden';message('매장을 여는 중…');closeGuide();
   try{
     if(!renderer)renderer=new StoreRenderer(view);
-    if(!stores.has(id))stores.set(id,(async()=>{
-      const data=await readAsset(id);
-      data.blocked=Uint8Array.from(atob(data.solid),c=>c.charCodeAt(0));
-      data.fixtures=Uint8Array.from(atob(data.walls),c=>c.charCodeAt(0));
-      return {data,buffers:await renderer.prepare(data)};
-    })().catch(e=>{stores.delete(id);throw e;}));
+    const owner=renderer;
+    if(owner.touchDisplay.matches){
+      for(const [other,pending] of stores){
+        if(other===id)continue;
+        stores.delete(other);
+        pending.then(old=>owner.release(old.buffers),()=>{});
+      }
+    }
+    if(!stores.has(id)){
+      const pending=(async()=>{
+        const data=await readAsset(id);
+        data.blocked=Uint8Array.from(atob(data.solid),c=>c.charCodeAt(0));
+        data.fixtures=Uint8Array.from(atob(data.walls),c=>c.charCodeAt(0));
+        return {data,buffers:await owner.prepare(data)};
+      })();
+      stores.set(id,pending);
+      pending.catch(()=>{if(stores.get(id)===pending)stores.delete(id);});
+    }
     const result=await stores.get(id);if(token!==generation)return;
     scene=result.data;gpu=result.buffers;loading=false;active=-1;makeOverview();jump(0);
     view.style.visibility='visible';el('tour').disabled=false;message('');requestRender();
@@ -131,7 +143,7 @@ function tick(ts){
     dirty=true;
   }
   const moving=Boolean(playing||keyset.size||axis.x||axis.y||pointers.size);
-  if(dirty){renderer.draw(scene,gpu,cam,moving);drawMap();dirty=false;}
+  if(dirty){renderer.draw(scene,gpu,cam,moving,dt);drawMap();dirty=false;}
   if(playing||keyset.size||axis.x||axis.y)frame=requestAnimationFrame(tick);else last=0;
 }
 function makeOverview(){
@@ -181,14 +193,11 @@ document.querySelectorAll('[data-area]').forEach(b=>b.onclick=()=>{if(+b.dataset
 el('mapToggle').onclick=()=>{const show=document.body.classList.toggle('panel');el('mapToggle').setAttribute('aria-expanded',String(show));requestRender();};
 el('closeGuide').onclick=closeGuide;
 const compactHeader=matchMedia('(max-width:760px)');
-function positionHelp(){
-  const helpButton=el('help');
-  if(compactHeader.matches)el('mapToggle').before(helpButton);
-  else document.querySelector('header').append(helpButton);
-}
-positionHelp();
-compactHeader.addEventListener('change',()=>{positionHelp();closeGuide();requestRender();});
-const help=el('instructions');el('help').onclick=()=>{resetInput();help.showModal();};
+compactHeader.addEventListener('change',()=>{closeGuide();requestRender();});
+const help=el('instructions');
+document.querySelectorAll('footer [aria-haspopup="dialog"]').forEach(button=>{
+  button.onclick=()=>{resetInput();help.showModal();};
+});
 el('dismiss').onclick=()=>help.close();
 const fs=el('full');if(!document.documentElement.requestFullscreen)fs.hidden=true;
 fs.onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{fs.hidden=true;}};
@@ -243,7 +252,7 @@ function bypassScore(tx,ty,nx,ny){
 function slideStep(nx,ny,intent,step){
   // The normal is axis-aligned because the floor plan is an occupancy grid.
   const tx=ny===0?0:1,ty=nx===0?0:1;
-  const along=Math.abs(intent)>.12?Math.sign(intent):0;
+  const along=Math.abs(intent)>.24?Math.sign(intent):0;
   let sign=along;
   if(!sign){
     if(slide&&slide.nx===nx&&slide.ny===ny)sign=slide.sign;
@@ -251,7 +260,7 @@ function slideStep(nx,ny,intent,step){
   }
   const travel=step*(.80+.20*Math.abs(intent));
   if(!walkable(cam.x+tx*travel*sign,cam.y+ty*travel*sign)){
-    if(along||!walkable(cam.x-tx*travel*sign,cam.y-ty*travel*sign))return;
+    if(!walkable(cam.x-tx*travel*sign,cam.y-ty*travel*sign))return;
     sign=-sign;
   }
   slide={nx,ny,sign};cam.x+=tx*travel*sign;cam.y+=ty*travel*sign;
@@ -302,13 +311,29 @@ function dragStick(e){
 }
 stick.onpointerdown=e=>{
   if(!scene||joy!==null||e.button!==0)return;
+  if(e.pointerType==='touch')e.preventDefault();
   joy=e.pointerId;stick.setPointerCapture(joy);
   const key=e.target.closest('[data-move]')?.dataset.move;
-  stickPress={key,x:e.clientX,y:e.clientY,t:performance.now()};
+  stickPress={key,x:e.clientX,y:e.clientY,t:performance.now(),bounds:stick.getBoundingClientRect()};
   if(key)steer(...directions[key]);else dragStick(e);
 };
+stick.oncontextmenu=e=>e.preventDefault();
 stick.onpointermove=e=>{
   if(joy!==e.pointerId||!stickPress)return;
+  // A finger pad can drift beyond the painted chevron during a sustained press.
+  if(e.pointerType==='touch'&&stickPress.key){
+    const b=stickPress.bounds,margin=18;
+    if(e.clientX<b.left-margin||e.clientX>b.right+margin||e.clientY<b.top-margin||e.clientY>b.bottom+margin){
+      clearStick();return;
+    }
+    if(Math.hypot(e.clientX-stickPress.x,e.clientY-stickPress.y)>b.width*.24){
+      const next=document.elementFromPoint(e.clientX,e.clientY)?.closest('#stick [data-move]')?.dataset.move;
+      if(next&&next!==stickPress.key){
+        stickPress.key=next;stickPress.x=e.clientX;stickPress.y=e.clientY;steer(...directions[next]);
+      }
+    }
+    return;
+  }
   if(!insideStick(e)){clearStick();return;}
   if(stickPress.key && Math.hypot(e.clientX-stickPress.x,e.clientY-stickPress.y)<5)return;
   stickPress.key=null;dragStick(e);

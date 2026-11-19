@@ -19,7 +19,7 @@ class ShelfProducts {
     }`;
     const fragment=`#version 300 es
     precision highp float;in vec3 wp,n;in vec4 local;in vec2 light;out vec4 pixel;
-    uniform sampler2D packages;uniform vec4 rect;uniform int family;uniform float glassTop;
+    uniform sampler2D packages;uniform vec4 rect;uniform int family;uniform float glassTop;uniform bool distantPack;
     ${reflection}
     ${ceilingIllumination}
     void main(){
@@ -30,6 +30,10 @@ class ShelfProducts {
       vec3 face=texture(packages,rect.xy+vec2(u,1.-z)*rect.zw).rgb;
       vec3 side=texture(packages,rect.xy+vec2(.974,1.-z)*rect.zw).rgb;
       vec3 c=mix(side,face,front);
+      if(distantPack){
+        float sky=clamp(.73+.22*sqrt(max(light.x,0.))+.13*N.z,.55,1.14);
+        pixel=vec4(c*sky+.015,1.);return;
+      }
       if(family==1 && local.z<.34){c=mix(vec3(.072,.095,.175),c,.19);}
       if(abs(N.z)>.89){c=mix(c,texture(packages,rect.xy+vec2(.76,1.-z)*rect.zw).rgb,.74);}
       float illuminance=mix(light.x,light.y,smoothstep(-.12,.91,N.z));
@@ -58,7 +62,7 @@ class ShelfProducts {
       pixel=vec4(displayLight(ceilingLight(c,wp,N,V,gloss),wp,N,V,gloss),1.);
     }`;
     this.program=createProgram(gl,vertex,fragment);
-    this.u=uniforms(gl,this.program,'eye right up forward focal room packages environment rect family glassTop lightField displayField');
+    this.u=uniforms(gl,this.program,'eye right up forward focal room packages environment rect family glassTop distantPack lightField displayField');
     gl.useProgram(this.program);gl.uniform1i(this.u.displayField,9);
     gl.uniform1i(this.u.environment,4);gl.uniform1i(this.u.packages,5);gl.uniform1i(this.u.lightField,6);
   }
@@ -68,8 +72,16 @@ class ShelfProducts {
     let rings=profile;
     if(lod){const spacing=lod===1?.055:.115;
       rings=profile.filter(([z,r],i)=>i===0||i===profile.length-1||z-profile[i-1][0]>spacing||i%(lod===1?3:5)===0||Math.abs(r-profile[Math.max(0,i-1)][1])>.12);}
-    const count=[36,20,10][lod],perimeter=[];
-    if(shape==='box'){
+    if(lod===3){
+      // A distant bottle needs its shoulder and closure silhouette, and a carton only two rings.
+      rings=shape==='box'?[profile[0],profile[profile.length-1]]:
+        [profile[0],...([.12,.64,.82].map(h=>profile.reduce((a,b)=>Math.abs(a[0]-h)<Math.abs(b[0]-h)?a:b))),profile[profile.length-1]];
+      rings=rings.filter((v,i)=>!i||v[0]>rings[i-1][0]);
+    }
+    const count=[36,20,10,6][lod],perimeter=[];
+    if(shape==='box'&&lod===3){
+      perimeter.push([1,1,1,1],[1,-1,1,-1],[-1,-1,-1,-1],[-1,1,-1,1]);
+    }else if(shape==='box'){
       for(const [cx,cy,begin] of [[.965,.91,0],[.965,-.91,90],[-.965,-.91,180],[-.965,.91,270]]){
         for(let j=0;j<=3;j+=lod===2?3:1){const t=(begin+j*30)*Math.PI/180;perimeter.push([cx+.035*Math.sin(t),cy+.09*Math.cos(t),Math.sin(t),Math.cos(t)]);}
       }
@@ -106,29 +118,30 @@ class ShelfProducts {
   }
   prepare(s){
     const {skus,profiles}=s.catalog;
-    const groups=skus.map(sku=>({sku,instances:[],meshes:[0,1,2].map(l=>this.mesh(sku.shape,profiles[sku.shape],l))}));
+    const groups=skus.map(sku=>({sku,instances:[],meshes:[0,1,2,3].map(l=>this.mesh(sku.shape,profiles[sku.shape],l))}));
     for(const [id,x,y,z,w,d,h,a,front,top] of s.products)groups[id].instances.push([x,y,z,w,d,h,Math.sin(a),Math.cos(a),front,top]);
-    for(const g of groups){g.layers=[0,1,2].map(()=>new Float32Array(g.instances.length*10));}
+    for(const g of groups){g.layers=[0,1,2,3].map(()=>new Float32Array(g.instances.length*10));}
     return groups;
   }
   draw(s,groups,cam,w,h,planes,mobileMotion){
     const gl=this.gl,u=this.u;gl.useProgram(this.program);cameraUniforms(gl,u,cam,s,w,h);
     const near=mobileMotion?1.6:3.8,mid=mobileMotion?12:33;
     for(const {sku,instances,layers,meshes} of groups){
-      const counts=[0,0,0];
+      const counts=[0,0,0,0];
       for(const instance of instances){
         const [x,y,z,width,depth,height]=instance;
         const radius=(width+depth)*.55;
         if(!visibleBox(planes,x,y,z+height*.5,radius,radius,height*.5))continue;
         const d=(x-cam.x)**2+(y-cam.y)**2+(z-1.58)**2;
-        const lod=d<near?0:d<mid?1:2;
+        const lod=mobileMotion&&d>15/(cam.zoom||1)**2?3:d<near?0:d<mid?1:2;
         layers[lod].set(instance,counts[lod]++*10);
       }
-      if(!counts[0]&&!counts[1]&&!counts[2])continue;
+      if(!counts[0]&&!counts[1]&&!counts[2]&&!counts[3])continue;
       gl.uniform1f(u.glassTop,sku.glassTop||0);
       gl.uniform4fv(u.rect,sku.rect);gl.uniform1i(u.family,sku.shape==='box'?1:['tube','tin','pump'].includes(sku.shape)?2:0);
-      for(let i=0;i<3;i++){
-        if(!counts[i])continue;const m=meshes[i];gl.bindVertexArray(m.vao);gl.bindBuffer(gl.ARRAY_BUFFER,m.instances);
+      for(let i=0;i<4;i++){
+        if(!counts[i])continue;
+        gl.uniform1i(u.distantPack,i===3?1:0);const m=meshes[i];gl.bindVertexArray(m.vao);gl.bindBuffer(gl.ARRAY_BUFFER,m.instances);
         gl.bufferData(gl.ARRAY_BUFFER,layers[i],gl.DYNAMIC_DRAW,0,counts[i]*10);
         gl.drawElementsInstanced(gl.TRIANGLES,m.count,gl.UNSIGNED_SHORT,0,counts[i]);
       }

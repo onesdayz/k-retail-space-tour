@@ -425,6 +425,7 @@ class StoreRenderer {
     gl.uniform1i(this.u.lightField,6);gl.uniform1i(this.u.atelier,7);gl.uniform1i(this.u.consultation,8);gl.uniform1i(this.u.displayField,9);
     gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clearColor(.85,.85,.80,1);
     this.aniso=gl.getExtension('EXT_texture_filter_anisotropic');
+    this.walkScale=1;this.slowTime=0;this.fastTime=0;
     this.touchDisplay=matchMedia('(pointer: coarse)');
     this.merch=new ShelfProducts(gl);
     this.glow=new CeilingGlow(gl);
@@ -432,7 +433,8 @@ class StoreRenderer {
   async prepare(s){
     const gl=this.gl,packed=Uint8Array.from(atob(s.geo),c=>c.charCodeAt(0));
     const binary=new Response(new Blob([packed]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
-    const imgs=await Promise.all(s.images.map(url=>new Promise((resolve,reject)=>{
+    const urls=s.images.map((url,i)=>this.touchDisplay.matches?(s.mobileImages?.[i]||url):url);
+    const imgs=await Promise.all(urls.map(url=>new Promise((resolve,reject)=>{
       const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('매장 재질을 불러오지 못했습니다. 새로고침해 주세요.'));img.src=url;
     })));
     const bytes=await binary,vao=gl.createVertexArray();gl.bindVertexArray(vao);
@@ -442,12 +444,14 @@ class StoreRenderer {
     }
     const textures=imgs.map((img,i)=>{
       const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
-      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);gl.generateMipmap(gl.TEXTURE_2D);
-      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
+      const mipmapped=i!==6&&i!==9&&i!==10;
+      if(mipmapped)gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,mipmapped?gl.LINEAR_MIPMAP_LINEAR:gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,i===4?gl.REPEAT:gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-      if(this.aniso)gl.texParameterf(gl.TEXTURE_2D,this.aniso.TEXTURE_MAX_ANISOTROPY_EXT,Math.min(8,gl.getParameter(this.aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+      if(this.aniso&&mipmapped)gl.texParameterf(gl.TEXTURE_2D,this.aniso.TEXTURE_MAX_ANISOTROPY_EXT,Math.min(this.touchDisplay.matches?2:8,gl.getParameter(this.aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
       return tex;
     });
     const finishes=['matte','wood','metal','satin','baked','porcelain','screen'];
@@ -458,9 +462,23 @@ class StoreRenderer {
     const contacts=new Float32Array((s.floorContacts||[]).flat());
     return {vao,vbo,textures,contacts,passes:meshRanges(bytes,s.groups,s.origin,s.extent),merch:this.merch.prepare(s),glow:this.glow.prepare(s.ceilingLights)};
   }
-  draw(s,gpu,cam,moving=false){
+  release(gpu){
+    const gl=this.gl;
+    for(const texture of gpu.textures)gl.deleteTexture(texture);
+    gl.deleteBuffer(gpu.vbo);gl.deleteVertexArray(gpu.vao);
+    gl.deleteBuffer(gpu.glow.buffer);gl.deleteVertexArray(gpu.glow.vao);
+  }
+  motionScale(dt){
+    // Change resolution only after sustained load, with slower recovery to avoid churn.
+    this.slowTime=dt>.034?this.slowTime+dt:Math.max(0,this.slowTime-dt);
+    this.fastTime=dt>0&&dt<.020?this.fastTime+dt:0;
+    if(this.slowTime>.9){this.walkScale=Math.max(.72,this.walkScale-.14);this.slowTime=0;}
+    if(this.fastTime>4){this.walkScale=Math.min(1,this.walkScale+.14);this.fastTime=0;}
+    return this.walkScale;
+  }
+  draw(s,gpu,cam,moving=false,dt=0){
     const gl=this.gl,cv=gl.canvas,touch=this.touchDisplay.matches;
-    const scale=Math.min(devicePixelRatio||1,touch?1.15:1.7,(touch?1200:2100)/Math.max(cv.clientWidth,cv.clientHeight,1));
+    const scale=Math.min(devicePixelRatio||1,touch?(moving?this.motionScale(dt):1.15):1.7,(touch?1200:2100)/Math.max(cv.clientWidth,cv.clientHeight,1));
     const w=Math.max(1,Math.round(cv.clientWidth*scale)),h=Math.max(1,Math.round(cv.clientHeight*scale));
     if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h;}
     gl.viewport(0,0,w,h);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
