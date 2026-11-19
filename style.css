@@ -21,7 +21,7 @@ header{height:76px;flex:none;display:flex;align-items:center;gap:20px;padding:0 
 .areas button[aria-pressed=true],.play button[aria-pressed=true],dialog button{background:var(--yellow);color:var(--ink)}
 .utility{width:34px;height:34px;border:1px solid var(--line);border-radius:50%;font-weight:700;color:var(--yellow)}
 main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) clamp(244px,22vw,310px)}
-.viewer{position:relative;min-width:0;overflow:hidden;background:#292824 url(assets/entrance-100.webp?v=6) center/cover}
+.viewer{position:relative;min-width:0;overflow:hidden;background:#292824 url(assets/entrance-100.webp?v=7) center/cover}
 .viewer:after{content:"";pointer-events:none;position:absolute;inset:65% 0 0;background:linear-gradient(transparent,#10101377)}
 #view{display:block;width:100%;height:100%;touch-action:none;cursor:grab}#view:active{cursor:grabbing}
 .tools,.zoom,.place,.play,#stick{position:absolute;z-index:1}
