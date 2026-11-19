@@ -1,0 +1,157 @@
+'use strict';
+window.storeData={};
+const el=id=>document.getElementById(id);
+const view=el('view'),map=el('map'),statusBox=el('load');
+const names=['입구','올리브영','중소 브랜드 A–D','종근당건강','WZ바이오','결제·포장'];
+const colors=['#617363','#66883d','#ae8b6c','#d5a53b','#354d86','#998a73'];
+const rad=Math.PI/180, clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+let area=100,scene=null,gpu=null,renderer=null,generation=0,active=-1,loading=false;
+let cam={x:0,y:0,yaw:0,pitch:0},frame=0,dirty=false,last=0,tourTime=0,playing=false;
+let keyset=new Set(),drag=null,joy=null,axis={x:0,y:0},mapLayout=null,overview=null;
+const stores=new Map(),nav=el('stops');
+const stopButtons=names.map((name,i)=>{
+  const button=document.createElement('button'),dot=document.createElement('i');dot.style.setProperty('--color',colors[i]);
+  button.append(dot,document.createTextNode(name));button.onclick=()=>jump(i);nav.append(button);return button;
+});
+function message(text){statusBox.hidden=!text;statusBox.textContent=text;}
+function readAsset(id){
+  if(window.storeData[id])return Promise.resolve(window.storeData[id]);
+  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js';
+    js.onload=()=>resolve(window.storeData[id]);js.onerror=()=>{js.remove();reject(Error('매장 자료를 열 수 없습니다. 페이지를 새로고침해 주세요.'));};document.head.append(js);});
+}
+async function openArea(id){
+  if(loading&&id===area)return;
+  const token=++generation;area=id;loading=true;stopTour();resetInput();scene=null;
+  document.querySelectorAll('[data-area]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.area===id)));
+  el('sizeLabel').textContent=id+'㎡';el('where').textContent='입구';el('tour').disabled=true;
+  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp)';
+  view.style.visibility='hidden';message('매장을 여는 중…');closeGuide();
+  try{
+    if(!renderer)renderer=new StoreRenderer(view);
+    if(!stores.has(id))stores.set(id,(async()=>{
+      const data=await readAsset(id);
+      data.blocked=Uint8Array.from(atob(data.solid),c=>c.charCodeAt(0));
+      data.fixtures=Uint8Array.from(atob(data.walls),c=>c.charCodeAt(0));
+      return {data,buffers:await renderer.prepare(data)};
+    })().catch(e=>{stores.delete(id);throw e;}));
+    const result=await stores.get(id);if(token!==generation)return;
+    scene=result.data;gpu=result.buffers;loading=false;active=-1;makeOverview();jump(0);
+    view.style.visibility='visible';el('tour').disabled=false;message('');requestRender();
+  }catch(e){if(token===generation){loading=false;message(e.message||'매장을 열 수 없습니다. 페이지를 새로고침해 주세요.');}}
+}
+function walkable(x,y){
+  const [w,h,d]=scene.grid,c=Math.floor(x/d),r=Math.floor(y/d);
+  return c>=0&&r>=0&&c<w&&r<h&&!scene.blocked[r*w+c];
+}
+function nearestSafe(x,y){
+  if(walkable(x,y))return [x,y];
+  const [w,h,d]=scene.grid;let best=Infinity,bx=x,by=y;
+  for(let r=0;r<h;r++)for(let c=0;c<w;c++){
+    if(scene.blocked[r*w+c])continue;
+    const px=(c+.5)*d,py=(r+.5)*d,ds=(x-px)**2+(y-py)**2;
+    if(ds<best){best=ds;bx=px;by=py;}
+  }return [bx,by];
+}
+function setStop(i){if(i===active)return;active=i;el('where').textContent=names[i];stopButtons.forEach((b,j)=>b.setAttribute('aria-current',String(i===j)));}
+function nearestIndex(arr,xy){let best=Infinity,index=0;arr.forEach((p,i)=>{const d=(p[0]-xy.x)**2+(p[1]-xy.y)**2;if(d<best){best=d;index=i;}});return index;}
+function zone(){
+  // The two parallel aisles belong to different sides of the same loop.
+  const t=nearestIndex(scene.route,cam)/5;
+  const breaks=area===100?[7,22,33,39.5,45]:[13,32,42.5,50.5,58];
+  setStop(breaks.filter(b=>t>=b).length);
+}
+function jump(i){
+  if(!scene)return;stopTour();resetInput();tourTime=scene.stops[i];const [x,y,yaw,pitch]=scene.route[Math.round(tourTime*5)];
+  const [sx,sy]=nearestSafe(x,y);cam={x:sx,y:sy,yaw,pitch};setStop(i);closeGuide();requestRender();
+}
+function stopTour(){
+  playing=false;el('tour').setAttribute('aria-pressed','false');el('playIcon').textContent='▶';el('playText').textContent='동선 따라가기';
+}
+function manual(){
+  if(!scene)return;
+  if(playing){stopTour();[cam.x,cam.y]=nearestSafe(cam.x,cam.y);}
+  tourTime=nearestIndex(scene.route,cam)/5;
+}
+function resetInput(){keyset.clear();drag=null;joy=null;axis={x:0,y:0};el('stick').querySelector('i').style.transform='';}
+function closeGuide(){document.body.classList.remove('panel');el('mapToggle').setAttribute('aria-expanded','false');}
+function requestRender(){dirty=true;if(!frame)frame=requestAnimationFrame(tick);}
+function tick(ts){
+  frame=0;const dt=last?Math.min((ts-last)/1000,.05):0;last=ts;
+  if(!scene)return;
+  if(playing){
+    const end=(scene.route.length-1)/5;tourTime=Math.min(end,tourTime+dt);
+    const j=Math.min(scene.route.length-2,Math.floor(tourTime*5)),f=tourTime*5-j;
+    const p=scene.route[j].map((v,k)=>v+(scene.route[j+1][k]-v)*f);
+    [cam.x,cam.y,cam.yaw,cam.pitch]=p;
+    const cuts=area===100?[7,22,33,39.5,45]:[13,32,42.5,50.5,58];setStop(cuts.filter(b=>tourTime>=b).length);
+    if(tourTime>=end){stopTour();[cam.x,cam.y]=nearestSafe(cam.x,cam.y);}
+    dirty=true;
+  }else if(keyset.size||axis.x||axis.y){
+    const k=key=>+keyset.has(key);
+    cam.yaw+=dt*85*(k('ArrowRight')-k('ArrowLeft'));
+    let side=k('KeyD')-k('KeyA')+axis.x,fwd=k('KeyW')+k('ArrowUp')-k('KeyS')-k('ArrowDown')+axis.y;
+    const divisor=Math.max(1,Math.hypot(side,fwd)),speed=dt*1.55/divisor;
+    const a=cam.yaw*rad,dx=speed*(Math.sin(a)*fwd+Math.cos(a)*side),dy=speed*(Math.cos(a)*fwd-Math.sin(a)*side);
+    if(walkable(cam.x+dx,cam.y))cam.x+=dx;
+    if(walkable(cam.x,cam.y+dy))cam.y+=dy;
+    if(dx||dy){zone();tourTime=nearestIndex(scene.route,cam)/5;}dirty=true;
+  }
+  if(dirty){renderer.draw(scene,gpu,cam);drawMap();dirty=false;}
+  if(playing||keyset.size||axis.x||axis.y)frame=requestAnimationFrame(tick);else last=0;
+}
+function makeOverview(){
+  const [w,h]=scene.grid;overview=document.createElement('canvas');overview.width=w;overview.height=h;
+  const ctx=overview.getContext('2d'),pic=ctx.createImageData(w,h);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const occupied=scene.fixtures[y*w+x],oy=x/w<(area===100?.6:.666);
+    const rgb=occupied?(oy?[153,169,142]:[174,164,145]):(oy?[222,231,215]:[239,232,216]);
+    const i=((h-1-y)*w+x)*4;pic.data.set([...rgb,255],i);
+  }ctx.putImageData(pic,0,0);
+}
+function drawMap(){
+  if(!scene||!map.clientWidth||!map.clientHeight)return;
+  const w=map.clientWidth,h=map.clientHeight,ratio=Math.min(2,devicePixelRatio||1);
+  map.width=w*ratio;map.height=h*ratio;
+  const ctx=map.getContext('2d');ctx.scale(ratio,ratio);
+  const s=Math.min((w-14)/scene.W,(h-10)/scene.D),x=(w-scene.W*s)/2,y=(h-scene.D*s)/2;
+  mapLayout={s,x,y};const mx=v=>x+v*s,my=v=>y+(scene.D-v)*s;
+  ctx.drawImage(overview,x,y,scene.W*s,scene.D*s);ctx.strokeStyle='#637164';ctx.lineWidth=1.3;ctx.strokeRect(x,y,scene.W*s,scene.D*s);
+  ctx.beginPath();ctx.setLineDash([3,3]);ctx.lineWidth=1.5;ctx.strokeStyle='#788f77';
+  scene.route.forEach((p,i)=>{if(i===0)ctx.moveTo(mx(p[0]),my(p[1]));else ctx.lineTo(mx(p[0]),my(p[1]));});ctx.stroke();ctx.setLineDash([]);
+  ctx.save();ctx.translate(mx(cam.x),my(cam.y));ctx.rotate(cam.yaw*rad);ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,17,-2.12,-1.02);ctx.closePath();ctx.fillStyle='#1f67494a';ctx.fill();
+  ctx.beginPath();ctx.arc(0,0,4.6,0,Math.PI*2);ctx.fillStyle='#205d42';ctx.fill();ctx.strokeStyle='white';ctx.lineWidth=1.5;ctx.stroke();ctx.restore();
+}
+map.onclick=e=>{
+  if(!scene||!mapLayout)return;const r=map.getBoundingClientRect(),m=mapLayout,x=(e.clientX-r.left-m.x)/m.s,y=scene.D-(e.clientY-r.top-m.y)/m.s;
+  if(!walkable(x,y))return;manual();cam.x=x;cam.y=y;zone();tourTime=nearestIndex(scene.route,cam)/5;closeGuide();requestRender();
+};
+el('tour').onclick=()=>{
+  if(!scene)return;
+  if(playing){stopTour();[cam.x,cam.y]=nearestSafe(cam.x,cam.y);requestRender();return;}
+  resetInput();if(tourTime>=(scene.route.length-1)/5-.02)tourTime=0;
+  playing=true;el('tour').setAttribute('aria-pressed','true');el('playIcon').textContent='Ⅱ';el('playText').textContent='일시 정지';requestRender();
+};
+document.querySelectorAll('[data-area]').forEach(b=>b.onclick=()=>{if(+b.dataset.area!==area||!scene)openArea(+b.dataset.area);});
+el('mapToggle').onclick=()=>{const show=document.body.classList.toggle('panel');el('mapToggle').setAttribute('aria-expanded',String(show));requestRender();};
+el('closeGuide').onclick=closeGuide;
+const help=el('instructions');el('help').onclick=()=>{resetInput();if(playing)manual();help.showModal();};
+el('dismiss').onclick=()=>help.close();
+const fs=el('full');if(!document.documentElement.requestFullscreen)fs.hidden=true;
+fs.onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{fs.hidden=true;}};
+document.addEventListener('fullscreenchange',()=>{fs.setAttribute('aria-label',document.fullscreenElement?'전체 화면 종료':'전체 화면');requestRender();});
+view.addEventListener('pointerdown',e=>{if(!scene||drag||e.button!==0)return;manual();drag={id:e.pointerId,x:e.clientX,y:e.clientY};view.setPointerCapture(e.pointerId);view.focus({preventScroll:true});});
+view.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;cam.yaw+=(e.clientX-drag.x)*.22;cam.pitch=clamp(cam.pitch-(e.clientY-drag.y)*.18,-75,75);drag.x=e.clientX;drag.y=e.clientY;requestRender();});
+view.onlostpointercapture=()=>{drag=null;};
+const stick=el('stick'),knob=stick.querySelector('i');
+function dragStick(e){const b=stick.getBoundingClientRect();let x=e.clientX-b.left-b.width/2,y=e.clientY-b.top-b.height/2;const max=32,scale=Math.max(1,Math.hypot(x,y)/max);x/=scale;y/=scale;axis={x:x/max,y:-y/max};knob.style.transform='translate('+x+'px,'+y+'px)';requestRender();}
+stick.onpointerdown=e=>{if(!scene||joy!==null)return;manual();joy=e.pointerId;stick.setPointerCapture(joy);dragStick(e);};
+stick.onpointermove=e=>{if(joy===e.pointerId)dragStick(e);};
+stick.onlostpointercapture=()=>{joy=null;axis={x:0,y:0};knob.style.transform='';};
+const allowed=new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight']);
+window.addEventListener('keydown',e=>{if(e.code==='Escape')closeGuide();if(!scene||help.open||e.metaKey||e.ctrlKey||e.altKey||!allowed.has(e.code))return;e.preventDefault();if(!e.repeat)manual();keyset.add(e.code);requestRender();});
+window.addEventListener('keyup',e=>keyset.delete(e.code));window.addEventListener('blur',resetInput);
+document.addEventListener('visibilitychange',()=>{if(document.hidden){resetInput();last=0;}});
+window.addEventListener('resize',requestRender);
+view.addEventListener('webglcontextlost',e=>{e.preventDefault();stopTour();resetInput();scene=null;message('그래픽 화면이 중단되었습니다. 복구하는 중…');});
+view.addEventListener('webglcontextrestored',()=>{renderer=null;stores.clear();loading=false;openArea(area);});
+openArea(100);
