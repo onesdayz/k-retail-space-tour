@@ -76,6 +76,21 @@ class StoreRenderer {
         c=texture(floorTex,vec2(plan.x,1.-plan.y)).rgb;
         vec3 r=reflected(wp,N,.31);
         c=mix(c,r,.22*fresnel(V,N,.055));
+        // Porcelain under the beauty fixtures retains the baked shadows at the base of each shelf.
+        float zoneEdge=room.x<10.?4.8:9.238;
+        float zoneStart=room.x<10.?2.50:1.13;
+        if(wp.x<zoneEdge && wp.y>zoneStart){
+          vec2 uv=vec2(plan.x,1.-plan.y);
+          float illumination=dot(textureLod(floorTex,uv,2.6).rgb,vec3(.24,.67,.09));
+          vec2 tile=wp.xy/vec2(.66,1.08);
+          tile.y+=.5*mod(floor(tile.x),2.);
+          vec2 line=min(fract(tile),1.-fract(tile));
+          vec2 aa=max(fwidth(tile),vec2(.0004));
+          vec2 seal=smoothstep(vec2(.001),vec2(.002)+aa,line);
+          float grain=noise2(wp.xy*160.)*.012+.014*sin(dot(floor(tile),vec2(7.67,13.2)));
+          c=vec3(.76,.77,.76)*(.55+.61*illumination+grain-.073*(1.-min(seal.x,seal.y)));
+          c=mix(c,r,.13*fresnel(V,N,.085));
+        }
       }else if(mode==3){
         c=texture(ceilTex,plan).rgb;
       }else if(mode==4){
@@ -105,8 +120,32 @@ class StoreRenderer {
         float grout=smoothstep(.492,.5,max(tile.x,tile.y));
         c=base*(.97+.025*sin(uv.x*13.+sin(uv.y*13.))+.018*noise2(uv*24.)-.10*grout);
       }else if(mode==7){c=mix(base*.64,reflected(wp,N,.24)*vec3(.99,.93,.78),.53);}
-      else if(mode==8||emission>2.){c=vec3(1.,.965,.854);}
+      else if(mode==10||mode==14){
+        // Brushed stainless and polished soffits pick up the colours of the surrounding aisles.
+        float polish=mode==14?.09:.34;
+        vec3 env=reflected(wp,N,polish);
+        float luminance=dot(env,vec3(.24,.67,.09));
+        vec2 grain=abs(N.z)>.6?wp.xy:vec2(wp.x+wp.y,wp.z);
+        float brushed=noise2(grain*vec2(4.,670.))*.023;
+        vec3 silver=mode==14?vec3(.67,.70,.69):vec3(.69,.705,.70);
+        vec3 sky=mix(vec3(luminance),env,.31);
+        c=mix(silver,sky,(mode==14?.72:.31)+.13*fresnel(V,N,.14))*(.75+.23*sqrt(ao)+.07*N.z)+brushed;
+      }else if(mode==11){
+        c=vec3(.95,.965,.951)*(.78+.20*sqrt(ao)+.035*N.z)+.015*reflected(wp,N,.44);
+      }else if(mode==12){
+        c=vec3(.096,.117,.112)*(.80+.26*ao+.12*N.z)+.16*reflected(wp,N,.46);
+      }else if(mode==13){c=vec3(.977,1.,.991);}
+      else if(mode==15){c=vec3(.066,.79,.28)*(.82+.17*ao);}
+      else if(mode==17){c=vec3(1.,.94,.79);}
+      else if(mode==18){
+        c=mix(vec3(.51,.32,.18)*(.72+.24*ao),reflected(wp,N,.30)*vec3(1.,.81,.61),.26);
+      }else if(mode==8||emission>2.){c=vec3(1.,.965,.854);}
       else if(mode==9){c=mix(vec3(.78,.86,.84),reflected(wp,N,.055),.79);alpha=.11+.44*fresnel(V,N,.04);}
+      if(finish==4){
+        vec3 irradiance=texture(lightmap,vec2(st.x,1.-st.y)).rgb;
+        float light=dot(irradiance,vec3(.22,.70,.08))/max(.24,dot(base,vec3(.22,.70,.08)));
+        c*=clamp(.43+.56*light,.51,1.03);
+      }
       pixel=vec4(c,alpha);
     }`;
     this.program=createProgram(gl,vertex,fragment);
@@ -139,7 +178,7 @@ class StoreRenderer {
       return tex;
     });
     let start=0;
-    for(const g of s.groups){g.start=start;start+=g.n;g.rgb=g.c.map(c=>Math.max(0,Math.min(1,1.055*Math.pow(c,1/2.4)-.055)));g.finishId=['matte','wood','metal','satin'].indexOf(g.finish);}
+    for(const g of s.groups){g.start=start;start+=g.n;g.rgb=g.c.map(c=>Math.max(0,Math.min(1,1.055*Math.pow(c,1/2.4)-.055)));g.finishId=['matte','wood','metal','satin','baked'].indexOf(g.finish);}
     return {vao,vbo,textures,merch:this.merch.prepare(s)};
   }
   draw(s,gpu,cam){
