@@ -132,6 +132,7 @@ class StoreRenderer {
     precision highp float;in vec3 wp,n;in vec2 st;in float ao;out vec4 pixel;
     uniform vec3 base;uniform vec4 rect;uniform int mode,finish;uniform float emission;
     uniform sampler2D atlas,floorTex,ceilTex,lightmap,atelier,consultation;
+    uniform vec4 contacts[12];
     ${reflection}
     ${ceilingIllumination}
     void main(){
@@ -160,6 +161,15 @@ class StoreRenderer {
           float grain=noise2(wp.xy*160.)*.012+.014*sin(dot(floor(tile),vec2(7.67,13.2)));
           c=vec3(.76,.77,.76)*(.55+.61*illumination+grain-.073*(1.-min(seal.x,seal.y)));
           c=mix(c,r,.13*fresnel(V,N,.085));
+        }else if(room.x>10. && wp.x>9.7 && wp.x<12. && wp.y>6.8 && wp.y<18.){
+          // A narrow contact shadow joins each pedestal and recessed plinth to the baked floor.
+          float shade=0.;
+          for(int i=0;i<12;i++){
+            vec4 foot=contacts[i];vec2 delta=wp.xy-foot.xy;
+            float gap=i<3?length(max(abs(delta)-foot.zw,vec2(0.))):max(0.,length(delta)-foot.z);
+            shade=max(shade,.24*exp(-gap/.029));
+          }
+          c*=1.-shade;
         }
       }else if(mode==3){
         c=texture(ceilTex,plan).rgb;
@@ -237,6 +247,10 @@ class StoreRenderer {
       }else if(mode==29||mode==31||mode==30){
         float speck=noise2(wp.xy*450.+wp.z*190.);
         c=base*(.68+.15*N.z+.12*speck+.14*ao);
+      }else if(mode==35){
+        float nap=noise2(wp.xy*470.+wp.z*318.);
+        float diffuse=.68+.18*max(N.z,0.)+.10*max(dot(N,normalize(vec3(-.42,.28,.86))),0.);
+        c=base*(diffuse+.027*nap)+vec3(.028,.021,.017)*pow(1.-abs(dot(N,V)),3.);
       }else if(mode==32){
         vec2 grain=vec2((wp.x+wp.y)*47.,wp.z*2.1);
         c=base*(.67+.14*N.z+.075*noise2(grain));
@@ -259,6 +273,7 @@ class StoreRenderer {
     }`;
     this.program=createProgram(gl,vertex,fragment);
     this.u=uniforms(gl,this.program,'extent origin eye right up forward focal room base rect mode finish emission atlas floorTex ceilTex lightmap environment lightField atelier consultation');
+    this.u.contacts=gl.getUniformLocation(this.program,'contacts[0]');
     gl.useProgram(this.program);
     ['atlas','floorTex','ceilTex','lightmap','environment'].forEach((key,i)=>gl.uniform1i(this.u[key],i));
     gl.uniform1i(this.u.lightField,6);gl.uniform1i(this.u.atelier,7);gl.uniform1i(this.u.consultation,8);
@@ -290,7 +305,8 @@ class StoreRenderer {
     });
     let start=0;
     for(const g of s.groups){g.start=start;start+=g.n;g.rgb=g.c.map(c=>Math.max(0,Math.min(1,1.055*Math.pow(c,1/2.4)-.055)));g.finishId=['matte','wood','metal','satin','baked','porcelain'].indexOf(g.finish);}
-    return {vao,vbo,textures,merch:this.merch.prepare(s),glow:this.glow.prepare(s.ceilingLights)};
+    const contacts=new Float32Array((s.floorContacts||[]).flat());
+    return {vao,vbo,textures,contacts,merch:this.merch.prepare(s),glow:this.glow.prepare(s.ceilingLights)};
   }
   draw(s,gpu,cam){
     const gl=this.gl,cv=gl.canvas,scale=Math.min(devicePixelRatio||1,1.7,2100/Math.max(cv.clientWidth,cv.clientHeight,1));
@@ -302,6 +318,7 @@ class StoreRenderer {
     const architecture=glass=>{
       gl.useProgram(this.program);gl.bindVertexArray(gpu.vao);
       cameraUniforms(gl,u,cam,s,w,h);gl.uniform3fv(u.origin,s.origin);gl.uniform3fv(u.extent,s.extent);
+      if(gpu.contacts.length)gl.uniform4fv(u.contacts,gpu.contacts);
       for(const g of s.groups){
         if((g.m===9)!==glass)continue;
         gl.uniform3fv(u.base,g.rgb);gl.uniform4fv(u.rect,g.rect||[0,0,1,1]);gl.uniform1i(u.mode,g.m);gl.uniform1i(u.finish,g.finishId);gl.uniform1f(u.emission,g.e);
