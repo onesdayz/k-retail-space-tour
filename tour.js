@@ -25,11 +25,19 @@ function readAsset(id){
   return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=9';
     js.onload=()=>resolve(window.storeData[id]);js.onerror=()=>{js.remove();reject(Error('매장 자료를 열 수 없습니다. 페이지를 새로고침해 주세요.'));};document.head.append(js);});
 }
+const planLink=el('planFile');
+const floorPlans={
+  100:{url:planLink.getAttribute('href'),filename:planLink.download},
+  300:{url:planLink.dataset.plan300,filename:'300㎡_매대배치_수정평면도.pdf'}
+};
 async function openArea(id){
   if(loading&&id===area)return;
   const token=++generation;area=id;loading=true;stopTour();resetInput();scene=null;
   document.querySelectorAll('[data-area]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.area===id)));
-  el('planFile').hidden=id!==300;el('sizeLabel').textContent=id+'㎡';el('where').textContent='입구';el('tour').disabled=true;
+  planLink.href=floorPlans[id].url;
+  planLink.download=floorPlans[id].filename;
+  planLink.querySelector('span').textContent=id+'㎡ 배치도 PDF';
+  el('sizeLabel').textContent=id+'㎡';el('where').textContent='입구';el('tour').disabled=true;
   document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=9)';
   view.style.visibility='hidden';message('매장을 여는 중…');closeGuide();
   try{
