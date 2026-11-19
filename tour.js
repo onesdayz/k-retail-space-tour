@@ -280,7 +280,9 @@ const galleryViews=[
   {label:'입구 정면',file:'front'},
   {label:'올리브영 전경',file:'angle'},
   {label:'브랜드관 전경',file:'brand'},
-  {label:'수직 상공',file:'plan'}
+  {label:'수직 상공',file:'plan'},
+  {label:'정면 단면',file:'front-section'},
+  {label:'측면 단면',file:'side-section'}
 ];
 const viewButtons=el('galleryViews'),galleryAreas=gallery.querySelectorAll('[data-gallery-area]');
 let galleryArea=100,galleryIndex=0;
@@ -288,7 +290,7 @@ function selectGalleryView(index){
   galleryIndex=index;
   const item=galleryViews[index],label=galleryArea+'㎡ · '+item.label;
   el('galleryImage').src=viewButtons.children[index].firstElementChild.src;
-  el('galleryImage').alt=label+' 조감도';
+  el('galleryImage').alt=label;
   el('galleryCaption').textContent=label;
   el('galleryCount').textContent=(index+1)+' / '+galleryViews.length;
   Array.from(viewButtons.children).forEach((button,i)=>button.setAttribute('aria-pressed',String(index===i)));
@@ -302,8 +304,14 @@ function showGalleryArea(id,index){
   selectGalleryView(index);
 }
 const gallerySources={
-  100:{front:'assets/aerial-100-front.webp',angle:'assets/aerial-100-angle.webp',brand:'assets/aerial-100-brand.webp',plan:'assets/aerial-100-plan.webp'},
-  300:{front:'assets/aerial-300-front.webp',angle:'assets/aerial-300-angle.webp',brand:'assets/aerial-300-brand.webp',plan:'assets/aerial-300-plan.webp'}
+  100:{front:'assets/aerial-100-front.webp',angle:'assets/aerial-100-angle.webp',brand:'assets/aerial-100-brand.webp',plan:'assets/aerial-100-plan.webp',
+    'front-section':'assets/aerial-100-front-section.webp',
+    'side-section':'assets/aerial-100-side-section.webp'
+  },
+  300:{front:'assets/aerial-300-front.webp',angle:'assets/aerial-300-angle.webp',brand:'assets/aerial-300-brand.webp',plan:'assets/aerial-300-plan.webp',
+    'front-section':'assets/aerial-300-front-section.webp',
+    'side-section':'assets/aerial-300-side-section.webp'
+  }
 };
 galleryViews.forEach(({label},i)=>{
   const button=document.createElement('button'),thumb=new Image();
