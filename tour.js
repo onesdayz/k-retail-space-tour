@@ -10,7 +10,7 @@ const rad=Math.PI/180, clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 let area=100,scene=null,gpu=null,renderer=null,generation=0,active=-1,loading=false;
 let cam={x:0,y:0,yaw:0,pitch:0},frame=0,dirty=false,last=0,tourTime=0,playing=false;
 const pointers=new Map();
-let stickPress=null,zoom=1;
+let stickPress=null,slide=null,zoom=1;
 let keyset=new Set(),joy=null,axis={x:0,y:0},mapLayout=null,overview=null;
 const stores=new Map(),nav=el('stops');
 const stopButtons=names.map((name,i)=>{
@@ -68,11 +68,11 @@ function nearestSafe(x,y){
 }
 function setStop(i){if(i===active)return;active=i;el('where').textContent=names[i];stopButtons.forEach((b,j)=>b.setAttribute('aria-current',String(i===j)));}
 function nearestIndex(arr,xy){let best=Infinity,index=0;arr.forEach((p,i)=>{const d=(p[0]-xy.x)**2+(p[1]-xy.y)**2;if(d<best){best=d;index=i;}});return index;}
-function zone(){
+function zone(routeIndex=nearestIndex(scene.route,cam)){
   // The two parallel aisles belong to different sides of the same loop.
   const [ex,ey]=scene.experienceView;
   if(Math.hypot(cam.x-ex,cam.y-ey)<.85){setStop(experienceIndex);return;}
-  const t=nearestIndex(scene.route,cam)/5;
+  const t=routeIndex/5;
   const breaks=area===100?[7,22,33,39.5,45]:[13,32,42.5,50.5,58];
   setStop(breaks.filter(b=>t>=b).length);
 }
@@ -92,11 +92,11 @@ function manual(){
   if(playing){stopTour();[cam.x,cam.y]=nearestSafe(cam.x,cam.y);}
   tourTime=nearestIndex(scene.route,cam)/5;
 }
-function resetInput(){keyset.clear();pointers.clear();clearStick();}
+function resetInput(){slide=null;keyset.clear();pointers.clear();clearStick();}
 function closeGuide(){document.body.classList.remove('panel');el('mapToggle').setAttribute('aria-expanded','false');}
 function requestRender(){dirty=true;if(!frame)frame=requestAnimationFrame(tick);}
 function tick(ts){
-  frame=0;const dt=last?Math.min((ts-last)/1000,.05):0;last=ts;
+  frame=0;const dt=last?Math.min((ts-last)/1000,.12):0;last=ts;
   if(!scene)return;
   if(playing){
     const end=(scene.route.length-1)/5;tourTime=Math.min(end,tourTime+dt);
@@ -113,7 +113,8 @@ function tick(ts){
     walk(side,fwd,dt*1.55);
     dirty=true;
   }
-  if(dirty){renderer.draw(scene,gpu,cam);drawMap();dirty=false;}
+  const moving=Boolean(playing||keyset.size||axis.x||axis.y||pointers.size);
+  if(dirty){renderer.draw(scene,gpu,cam,moving);drawMap();dirty=false;}
   if(playing||keyset.size||axis.x||axis.y)frame=requestAnimationFrame(tick);else last=0;
 }
 function makeOverview(){
@@ -128,10 +129,12 @@ function makeOverview(){
   }ctx.putImageData(pic,0,0);
 }
 function drawMap(){
-  if(!scene||!map.clientWidth||!map.clientHeight)return;
+  if(!scene||(compactHeader.matches&&!document.body.classList.contains('panel'))||!map.clientWidth||!map.clientHeight)return;
   const w=map.clientWidth,h=map.clientHeight,ratio=Math.min(2,devicePixelRatio||1);
-  map.width=w*ratio;map.height=h*ratio;
-  const ctx=map.getContext('2d');ctx.scale(ratio,ratio);
+  if(map.width!==Math.round(w*ratio)||map.height!==Math.round(h*ratio)){
+    map.width=Math.round(w*ratio);map.height=Math.round(h*ratio);
+  }
+  const ctx=map.getContext('2d');ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,w,h);
   const s=Math.min((w-14)/scene.W,(h-10)/scene.D),x=(w-scene.W*s)/2,y=(h-scene.D*s)/2;
   mapLayout={s,x,y};const mx=v=>x+v*s,my=v=>y+(scene.D-v)*s;
   ctx.drawImage(overview,x,y,scene.W*s,scene.D*s);ctx.strokeStyle='#a69a7b';ctx.lineWidth=1.3;ctx.strokeRect(x,y,scene.W*s,scene.D*s);
@@ -199,21 +202,60 @@ view.onpointermove=e=>{
   }
   pointers.set(e.pointerId,next);
 };
-view.onpointerup=view.onpointercancel=view.onlostpointercapture=e=>pointers.delete(e.pointerId);
+view.onpointerup=view.onpointercancel=view.onlostpointercapture=e=>{
+  if(pointers.delete(e.pointerId))requestRender();
+};
 const stick=el('stick'),knob=stick.querySelector('i');
 const directions={up:[0,1],down:[0,-1],left:[-1,0],right:[1,0]};
-function walk(side,forward,distance){
-  if(!scene||(!side&&!forward))return;
-  const speed=distance/Math.max(1,Math.hypot(side,forward)),a=cam.yaw*rad;
-  const dx=speed*(Math.sin(a)*forward+Math.cos(a)*side);
-  const dy=speed*(Math.cos(a)*forward-Math.sin(a)*side);
-  // Keep even short single taps on the traversable cells of the floor plan.
-  const steps=Math.max(1,Math.ceil(distance/.045));
-  for(let i=0;i<steps;i++){
-    if(walkable(cam.x+dx/steps,cam.y))cam.x+=dx/steps;
-    if(walkable(cam.x,cam.y+dy/steps))cam.y+=dy/steps;
+// For a head-on contact, follow the edge with the nearest reachable opening.
+function bypassScore(tx,ty,nx,ny){
+  const cell=scene.grid[2],stride=cell*.5;
+  let run=0;
+  for(let i=1;i<=120;i++){
+    const d=i*stride,x=cam.x+tx*d,y=cam.y+ty*d;
+    if(!walkable(x,y))break;
+    run=d;
+    if(walkable(x+nx*cell*1.5,y+ny*cell*1.5))return 10-d;
   }
-  zone();tourTime=nearestIndex(scene.route,cam)/5;
+  return run;
+}
+function slideStep(nx,ny,intent,step){
+  // The normal is axis-aligned because the floor plan is an occupancy grid.
+  const tx=ny===0?0:1,ty=nx===0?0:1;
+  const along=Math.abs(intent)>.12?Math.sign(intent):0;
+  let sign=along;
+  if(!sign){
+    if(slide&&slide.nx===nx&&slide.ny===ny)sign=slide.sign;
+    else sign=bypassScore(tx,ty,nx,ny)>=bypassScore(-tx,-ty,nx,ny)?1:-1;
+  }
+  const travel=step*(.80+.20*Math.abs(intent));
+  if(!walkable(cam.x+tx*travel*sign,cam.y+ty*travel*sign)){
+    if(along||!walkable(cam.x-tx*travel*sign,cam.y-ty*travel*sign))return;
+    sign=-sign;
+  }
+  slide={nx,ny,sign};cam.x+=tx*travel*sign;cam.y+=ty*travel*sign;
+}
+function walk(side,forward,distance){
+  if(!scene||(!side&&!forward)||distance<=0)return;
+  const input=Math.hypot(side,forward),a=cam.yaw*rad;
+  const ux=(Math.sin(a)*forward+Math.cos(a)*side)/input;
+  const uy=(Math.cos(a)*forward-Math.sin(a)*side)/input;
+  const travel=distance*Math.min(1,input),steps=Math.ceil(travel/(scene.grid[2]*.45)),step=travel/steps;
+  for(let i=0;i<steps;i++){
+    const x=cam.x+ux*step,y=cam.y+uy*step;
+    const freeX=walkable(x,cam.y),freeY=walkable(cam.x,y);
+    if((freeX||freeY)&&walkable(x,y)){cam.x=x;cam.y=y;continue;}
+    // When only the diagonal is blocked, carry on along the dominant free axis.
+    let wallX=!freeX;
+    if(freeX===freeY){
+      const mostlyX=Math.abs(ux)>=Math.abs(uy);
+      wallX=freeX?!mostlyX:mostlyX;
+    }
+    if(wallX)slideStep(Math.sign(ux)||1,0,uy,step);
+    else slideStep(0,Math.sign(uy)||1,ux,step);
+  }
+  const nearest=nearestIndex(scene.route,cam);
+  zone(nearest);tourTime=nearest/5;
 }
 function steer(x,y){
   const d=Math.max(1,Math.hypot(x,y));axis={x:x/d,y:y/d};
@@ -224,7 +266,7 @@ function steer(x,y){
 }
 function clearStick(){
   const id=joy;
-  joy=null;stickPress=null;axis={x:0,y:0};
+  joy=null;stickPress=null;slide=null;axis={x:0,y:0};
   knob.style.transform='';stick.removeAttribute('data-active');
   if(id!==null && stick.hasPointerCapture(id))stick.releasePointerCapture(id);
 }
@@ -264,7 +306,7 @@ stick.onclick=e=>{
 };
 const allowed=new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight']);
 window.addEventListener('keydown',e=>{if(e.code==='Escape')closeGuide();if(!scene||help.open||e.metaKey||e.ctrlKey||e.altKey||!allowed.has(e.code))return;e.preventDefault();if(!e.repeat)manual();keyset.add(e.code);requestRender();});
-window.addEventListener('keyup',e=>keyset.delete(e.code));window.addEventListener('blur',resetInput);
+window.addEventListener('keyup',e=>{if(keyset.delete(e.code)){slide=null;requestRender();}});window.addEventListener('blur',resetInput);
 document.addEventListener('visibilitychange',()=>{if(document.hidden){resetInput();last=0;}});
 window.addEventListener('resize',requestRender);
 view.addEventListener('webglcontextlost',e=>{e.preventDefault();stopTour();resetInput();scene=null;message('그래픽 화면이 중단되었습니다. 복구하는 중…');});

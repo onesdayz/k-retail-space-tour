@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="roof" x2=".8" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#fff0ae"/><stop offset=".53" stop-color="#efc66e"/><stop offset="1" stop-color="#bd8944"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" fill="#1e1d20"/>
+  <!-- Swept eaves above a pair of folded brass entrance piers. -->
+  <path fill="url(#roof)" d="M10 26c8 .4 15-5.5 22-13 7 7.5 14 13.4 22 13l-4 6c-7.1-.5-12.5-4.7-18-10-5.5 5.3-10.9 9.5-18 10z"/>
+  <path fill="#efc978" d="M18 33.6l6-2.4v13.6l-6 3.1z"/>
+  <path fill="#b28a50" d="M24 31.2l3.4 1.9v9.9L24 44.8z"/>
+  <path fill="#e6b867" d="M40 31.2l6 2.4v14.3l-6-3.1z"/>
+  <path fill="#ffdc8b" d="M40 31.2l-3.4 1.9v9.9l3.4 1.8z"/>
+  <path fill="#ebc77e" d="M17 51.1L32 44l15 7.1-4.8 1.8L32 48l-10.2 4.9z"/>
+</svg>

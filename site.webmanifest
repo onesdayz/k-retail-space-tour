@@ -1,0 +1,15 @@
+{
+  "id": "./",
+  "name": "한국우수상품전용관 · 실내 공간 투어",
+  "short_name": "공간 투어",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#141416",
+  "theme_color": "#141416",
+  "icons": [
+    {"src": "assets/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "assets/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

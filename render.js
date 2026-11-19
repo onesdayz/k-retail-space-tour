@@ -204,6 +204,42 @@ class CeilingGlow {
     gl.enable(gl.DEPTH_TEST);
   }
 }
+// Partition large material batches into consecutive triangle ranges. A range outside
+// any camera plane can be skipped without changing the order of the visible triangles.
+function meshRanges(bytes,groups,origin,extent){
+  const data=new Uint16Array(bytes),stride=7,passes=[[],[],[]];
+  let first=0;
+  for(const group of groups){
+    const ranges=[];
+    for(let start=first;start<first+group.n;start+=3072){
+      const count=Math.min(3072,first+group.n-start),lo=[65535,65535,65535],hi=[0,0,0];
+      for(let end=(start+count)*stride,i=start*stride;i<end;i+=stride){
+        for(let k=0;k<3;k++){const q=data[i+k];if(q<lo[k])lo[k]=q;if(q>hi[k])hi[k]=q;}
+      }
+      const half=hi.map((v,k)=>(v-lo[k])*extent[k]/131070);
+      const center=lo.map((v,k)=>origin[k]+v*extent[k]/65535+half[k]);
+      ranges.push({start,count,center,half});
+    }
+    const pass=group.m===9?2:group.m===36?1:0;
+    passes[pass].push({group,ranges});first+=group.n;
+  }
+  return passes;
+}
+function cameraPlanes(cam,w,h){
+  const yaw=cam.yaw*Math.PI/180,pitch=cam.pitch*Math.PI/180;
+  const sy=Math.sin(yaw),cy=Math.cos(yaw),sp=Math.sin(pitch),cp=Math.cos(pitch);
+  const f=[sy*cp,cy*cp,sp],right=[cy,-sy,0],up=[-sy*sp,-cy*sp,cp];
+  const ty=Math.tan(63*Math.PI/360)/(cam.zoom||1),tx=ty*w/h;
+  return [f,...[[right,tx,1],[right,tx,-1],[up,ty,1],[up,ty,-1]].map(([axis,t,sign])=>
+    f.map((v,k)=>t*v+axis[k]*sign))].map(([x,y,z])=>
+      [x,y,z,Math.abs(x),Math.abs(y),Math.abs(z),-x*cam.x-y*cam.y-z*1.58]);
+}
+function visibleBox(planes,x,y,z,hx,hy,hz){
+  for(const p of planes){
+    if(p[0]*x+p[1]*y+p[2]*z+p[6]+p[3]*hx+p[4]*hy+p[5]*hz<-.005)return false;
+  }
+  return true;
+}
 class StoreRenderer {
   constructor(canvas) {
     const gl=this.gl=canvas.getContext('webgl2',{alpha:false,antialias:true,powerPreference:'high-performance'});
@@ -389,6 +425,7 @@ class StoreRenderer {
     gl.uniform1i(this.u.lightField,6);gl.uniform1i(this.u.atelier,7);gl.uniform1i(this.u.consultation,8);gl.uniform1i(this.u.displayField,9);
     gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clearColor(.85,.85,.80,1);
     this.aniso=gl.getExtension('EXT_texture_filter_anisotropic');
+    this.touchDisplay=matchMedia('(pointer: coarse)');
     this.merch=new ShelfProducts(gl);
     this.glow=new CeilingGlow(gl);
   }
@@ -413,38 +450,59 @@ class StoreRenderer {
       if(this.aniso)gl.texParameterf(gl.TEXTURE_2D,this.aniso.TEXTURE_MAX_ANISOTROPY_EXT,Math.min(8,gl.getParameter(this.aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
       return tex;
     });
-    let start=0;
-    for(const g of s.groups){g.start=start;start+=g.n;g.rgb=g.c.map(c=>Math.max(0,Math.min(1,1.055*Math.pow(c,1/2.4)-.055)));g.finishId=['matte','wood','metal','satin','baked','porcelain','screen'].indexOf(g.finish);}
+    const finishes=['matte','wood','metal','satin','baked','porcelain','screen'];
+    for(const g of s.groups){
+      g.rgb=g.c.map(c=>Math.max(0,Math.min(1,1.055*Math.pow(c,1/2.4)-.055)));
+      g.finishId=finishes.indexOf(g.finish);g.rect??=[0,0,1,1];
+    }
     const contacts=new Float32Array((s.floorContacts||[]).flat());
-    return {vao,vbo,textures,contacts,merch:this.merch.prepare(s),glow:this.glow.prepare(s.ceilingLights)};
+    return {vao,vbo,textures,contacts,passes:meshRanges(bytes,s.groups,s.origin,s.extent),merch:this.merch.prepare(s),glow:this.glow.prepare(s.ceilingLights)};
   }
-  draw(s,gpu,cam){
-    const gl=this.gl,cv=gl.canvas,scale=Math.min(devicePixelRatio||1,1.7,2100/Math.max(cv.clientWidth,cv.clientHeight,1));
+  draw(s,gpu,cam,moving=false){
+    const gl=this.gl,cv=gl.canvas,touch=this.touchDisplay.matches;
+    const scale=Math.min(devicePixelRatio||1,touch?1.15:1.7,(touch?1200:2100)/Math.max(cv.clientWidth,cv.clientHeight,1));
     const w=Math.max(1,Math.round(cv.clientWidth*scale)),h=Math.max(1,Math.round(cv.clientHeight*scale));
     if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h;}
     gl.viewport(0,0,w,h);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
     gpu.textures.forEach((tex,i)=>{gl.activeTexture(gl.TEXTURE0+i);gl.bindTexture(gl.TEXTURE_2D,tex);});
     const u=this.u;
     gl.activeTexture(gl.TEXTURE11);gl.bindTexture(gl.TEXTURE_2D,this.backdrop);
+    const planes=cameraPlanes(cam,w,h);
+    function visible(range){
+      const c=range.center,b=range.half;
+      return visibleBox(planes,c[0],c[1],c[2],b[0],b[1],b[2]);
+    }
     const architecture=pass=>{
       gl.useProgram(this.program);gl.bindVertexArray(gpu.vao);
       cameraUniforms(gl,u,cam,s,w,h);gl.uniform3fv(u.origin,s.origin);gl.uniform3fv(u.extent,s.extent);
       if(gpu.contacts.length)gl.uniform4fv(u.contacts,gpu.contacts);
-      for(const g of s.groups){
-        if((g.m===9?2:g.m===36?1:0)!==pass)continue;
-        gl.uniform3fv(u.base,g.rgb);gl.uniform4fv(u.rect,g.rect||[0,0,1,1]);gl.uniform1i(u.mode,g.m);gl.uniform1i(u.finish,g.finishId);gl.uniform1f(u.emission,g.e);
-        gl.drawArrays(gl.TRIANGLES,g.start,g.n);
+      for(const {group:g,ranges} of gpu.passes[pass]){
+        let bound=false,first=0,count=0;
+        for(const range of ranges){
+          if(visible(range)){
+            if(!bound){
+              gl.uniform3fv(u.base,g.rgb);gl.uniform4fv(u.rect,g.rect);
+              gl.uniform1i(u.mode,g.m);gl.uniform1i(u.finish,g.finishId);gl.uniform1f(u.emission,g.e);
+              bound=true;
+            }
+            if(count===0)first=range.start;
+            count+=range.count;
+          }else if(count){gl.drawArrays(gl.TRIANGLES,first,count);count=0;}
+        }
+        if(count)gl.drawArrays(gl.TRIANGLES,first,count);
       }
     };
     architecture(0);
-    this.merch.draw(s,gpu.merch,cam,w,h);
-    gl.activeTexture(gl.TEXTURE11);gl.bindTexture(gl.TEXTURE_2D,this.backdrop);
-    if(this.backdropWidth!==w || this.backdropHeight!==h){
-      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB8,w,h,0,gl.RGB,gl.UNSIGNED_BYTE,null);
-      this.backdropWidth=w;this.backdropHeight=h;
+    this.merch.draw(s,gpu.merch,cam,w,h,planes,touch&&moving);
+    if(gpu.passes[1].some(batch=>batch.ranges.some(visible))){
+      gl.activeTexture(gl.TEXTURE11);gl.bindTexture(gl.TEXTURE_2D,this.backdrop);
+      if(this.backdropWidth!==w || this.backdropHeight!==h){
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB8,w,h,0,gl.RGB,gl.UNSIGNED_BYTE,null);
+        this.backdropWidth=w;this.backdropHeight=h;
+      }
+      gl.copyTexSubImage2D(gl.TEXTURE_2D,0,0,0,0,0,w,h);
+      architecture(1);
     }
-    gl.copyTexSubImage2D(gl.TEXTURE_2D,0,0,0,0,0,w,h);
-    architecture(1);
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
     architecture(2);this.glow.draw(s,gpu.glow,cam,w,h);gl.depthMask(true);gl.disable(gl.BLEND);
   }

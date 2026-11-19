@@ -71,7 +71,7 @@ class ShelfProducts {
     const count=[36,20,10][lod],perimeter=[];
     if(shape==='box'){
       for(const [cx,cy,begin] of [[.965,.91,0],[.965,-.91,90],[-.965,-.91,180],[-.965,.91,270]]){
-        for(let j=0;j<=3;j++){const t=(begin+j*30)*Math.PI/180;perimeter.push([cx+.035*Math.sin(t),cy+.09*Math.cos(t),Math.sin(t),Math.cos(t)]);}
+        for(let j=0;j<=3;j+=lod===2?3:1){const t=(begin+j*30)*Math.PI/180;perimeter.push([cx+.035*Math.sin(t),cy+.09*Math.cos(t),Math.sin(t),Math.cos(t)]);}
       }
     }else{
       for(let j=0;j<count;j++){const t=j*2*Math.PI/count;perimeter.push([Math.sin(t),Math.cos(t),Math.sin(t),Math.cos(t)]);}
@@ -111,18 +111,20 @@ class ShelfProducts {
     for(const g of groups){g.layers=[0,1,2].map(()=>new Float32Array(g.instances.length*10));}
     return groups;
   }
-  draw(s,groups,cam,w,h){
+  draw(s,groups,cam,w,h,planes,mobileMotion){
     const gl=this.gl,u=this.u;gl.useProgram(this.program);cameraUniforms(gl,u,cam,s,w,h);
-    const a=cam.yaw*Math.PI/180,sn=Math.sin(a),cs=Math.cos(a),tanX=.614*w/(h*(cam.zoom||1));
+    const near=mobileMotion?1.6:3.8,mid=mobileMotion?12:33;
     for(const {sku,instances,layers,meshes} of groups){
       const counts=[0,0,0];
       for(const instance of instances){
-        const dx=instance[0]-cam.x,dy=instance[1]-cam.y,front=dx*sn+dy*cs;
-        if(Math.abs(cam.pitch)<48 && (front<-.24||Math.abs(dx*cs-dy*sn)>Math.max(0,front)*(tanX+.18)+.9))continue;
-        const d=dx*dx+dy*dy+(instance[2]-1.58)**2;
-        const lod=d<3.8?0:d<33?1:2;
+        const [x,y,z,width,depth,height]=instance;
+        const radius=(width+depth)*.55;
+        if(!visibleBox(planes,x,y,z+height*.5,radius,radius,height*.5))continue;
+        const d=(x-cam.x)**2+(y-cam.y)**2+(z-1.58)**2;
+        const lod=d<near?0:d<mid?1:2;
         layers[lod].set(instance,counts[lod]++*10);
       }
+      if(!counts[0]&&!counts[1]&&!counts[2])continue;
       gl.uniform1f(u.glassTop,sku.glassTop||0);
       gl.uniform4fv(u.rect,sku.rect);gl.uniform1i(u.family,sku.shape==='box'?1:['tube','tin','pump'].includes(sku.shape)?2:0);
       for(let i=0;i<3;i++){
