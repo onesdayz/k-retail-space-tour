@@ -97,46 +97,99 @@ function cameraUniforms(gl,u,camera,room,w,h){
   gl.uniform3f(u.right,c,-s,0);gl.uniform3f(u.up,-s*sp,-c*sp,cp);gl.uniform3f(u.forward,s*cp,c*cp,sp);
   const fy=(camera.zoom||1)/Math.tan(63*rad/2);gl.uniform2f(u.focal,fy*h/w,fy);gl.uniform2f(u.room,room.W,room.D);
 }
-// Depth-tested lens bloom. Each emitter uses its actual position and radius in metres.
+// Lens response for the visible ceiling emitters. The visibility tiles are baked
+// at the tour's eye height and use the same order as scene.ceilingLights.
 class CeilingGlow {
   constructor(gl){
     this.gl=gl;
     const vertex=`#version 300 es
       layout(location=0) in vec4 emitter;
-      layout(location=1) in float globe;
-      out vec2 uv;out vec3 tint;out float strength;
+      uniform sampler2D lampVisibility;
+      uniform ivec2 tileLayout;uniform vec2 room;
+      uniform highp int lensPass;
+      out vec2 uv;out vec3 tint;out float strength,defocus,globe;
       ${projection}
       void main(){
-        vec2 corner=vec2((gl_VertexID==1||gl_VertexID==3)?1.:-1.,gl_VertexID>=2?1.:-1.);
+        vec2 tiles=vec2(tileLayout),cells=vec2(textureSize(lampVisibility,0))/tiles;
+        vec2 tile=vec2(gl_InstanceID%tileLayout.x,gl_InstanceID/tileLayout.x);
+        vec2 sampleUV=(tile+(clamp(eye.xy/room,0.,1.)*(cells-1.)+.5)/cells)/tiles;
+        float visible=textureLod(lampVisibility,sampleUV,0.).r;
         vec3 toward=normalize(eye-emitter.xyz);
-        float size=emitter.w*mix(4.5,2.85,globe);
-        float facing=smoothstep(.08,.7,-toward.z);
-        strength=mix(.32*facing,.39,globe);
-        tint=mix(vec3(.88,.96,1.),vec3(1.,.80,.50),globe);
-        uv=corner;
-        gl_Position=project(emitter.xyz+toward*emitter.w*1.01+size*(right*corner.x+up*corner.y));
+        globe=step(.08,emitter.w);
+        vec4 center=project(emitter.xyz+toward*emitter.w*1.01);
+        vec2 ndc=center.xy/max(.01,center.w);
+        float edge=max(abs(ndc.x),abs(ndc.y));
+        if(center.w<.12||visible<.003||edge>(lensPass==0?1.3:1.0)){
+          gl_Position=vec4(2.,2.,2.,1.);return;
+        }
+        uv=vec2((gl_VertexID==1||gl_VertexID==3)?1.:-1.,gl_VertexID>=2?1.:-1.);
+        float angle=clamp(dot(forward,-toward),0.,1.);
+        float facing=mix(smoothstep(.035,.45,-toward.z),1.,globe);
+        strength=visible*facing*(.44+.56*angle);
+        defocus=smoothstep(3.6,12.,center.w);
+        tint=mix(emitter.w<.04?vec3(1.,.87,.69):vec3(.88,.95,1.),vec3(1.,.83,.60),globe);
+        if(lensPass==0){
+          float radius=emitter.w*mix(6.5,3.35,globe)+center.w*.012*defocus;
+          gl_Position=center+vec4(uv*focal*radius,0.,0.);
+        }else{
+          // A faint internal reflection falls across the optical axis from the source.
+          strength*=smoothstep(.72,.99,angle)*(1.-smoothstep(.76,1.,edge))*mix(.33,1.,globe);
+          float radius=.016+.026*globe+.010*defocus;
+          gl_Position=vec4(-.34*ndc+uv*focal*radius,0.,1.);
+        }
       }`;
     const fragment=`#version 300 es
-      precision mediump float;in vec2 uv;in vec3 tint;in float strength;out vec4 pixel;
-      void main(){float r2=dot(uv,uv);pixel=vec4(tint,strength*exp(-4.6*r2)*(1.-smoothstep(.54,1.,r2)));}`;
+      precision highp float;
+      in vec2 uv;in vec3 tint;in float strength,defocus,globe;
+      uniform highp int lensPass;out vec4 pixel;
+      float aperture(vec2 p){
+        vec2 q=abs(p);
+        return mix(length(p),max(q.y,.866025*q.x+.5*q.y),.62);
+      }
+      float ray(vec2 axis){
+        float along=abs(dot(uv,axis));
+        float across=abs(dot(uv,vec2(-axis.y,axis.x)));
+        return exp(-across/(.009+.015*along)-3.1*along);
+      }
+      void main(){
+        float r=length(uv),a=aperture(uv);
+        if(lensPass!=0){
+          float disc=1.-smoothstep(.67,.95,a);
+          float rim=exp(-38.*abs(a-.75));
+          pixel=vec4(mix(tint,vec3(.78,.89,.92),.40),strength*(.052*disc+.042*rim));
+          return;
+        }
+        float halo=.40*exp(-6.4*r*r);
+        float flare=(ray(vec2(.99255,.12187))+.52*ray(vec2(.39073,.92050))
+                    +.44*ray(vec2(-.60182,.79864)))*mix(.31,.14,globe);
+        float blade=.28+.22*defocus;
+        float bokeh=defocus*(.19*(1.-smoothstep(blade-.13,blade+.05,a))+
+                             .095*exp(-25.*abs(a-blade)));
+        pixel=vec4(tint,strength*(halo+flare+bokeh)*(1.-smoothstep(.76,1.,r)));
+      }`;
     this.program=createProgram(gl,vertex,fragment);
-    this.u=uniforms(gl,this.program,'eye right up forward focal room');
+    this.u=uniforms(gl,this.program,'eye right up forward focal room lampVisibility tileLayout lensPass');
+    gl.useProgram(this.program);gl.uniform1i(this.u.lampVisibility,10);
   }
   prepare(lights){
     const gl=this.gl,vao=gl.createVertexArray();gl.bindVertexArray(vao);
     const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
-    const data=lights.flatMap(([x,y,z,r])=>[x,y,z,r,r>.08?1:0]);
+    const data=lights.flatMap(light=>light.slice(0,4));
     gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW);
-    for(const [i,width,offset] of [[0,4,0],[1,1,16]]){
-      gl.enableVertexAttribArray(i);gl.vertexAttribPointer(i,width,gl.FLOAT,false,20,offset);gl.vertexAttribDivisor(i,1);
-    }
-    return {vao,buffer,count:lights.length};
+    gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,4,gl.FLOAT,false,16,0);gl.vertexAttribDivisor(0,1);
+    const columns=Math.ceil(Math.sqrt(lights.length));
+    return {vao,buffer,count:lights.length,columns,rows:Math.ceil(lights.length/columns)};
   }
   draw(s,glow,cam,w,h){
     const gl=this.gl;gl.useProgram(this.program);gl.bindVertexArray(glow.vao);
     cameraUniforms(gl,this.u,cam,s,w,h);
+    gl.uniform2i(this.u.tileLayout,glow.columns,glow.rows);
     gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
+    gl.uniform1i(this.u.lensPass,0);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP,0,4,glow.count);
+    gl.disable(gl.DEPTH_TEST);gl.uniform1i(this.u.lensPass,1);
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP,0,4,glow.count);
+    gl.enable(gl.DEPTH_TEST);
   }
 }
 class StoreRenderer {

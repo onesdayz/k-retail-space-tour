@@ -22,7 +22,7 @@ stopButtons[0].after(stopButtons[experienceIndex]);
 function message(text){statusBox.hidden=!text;statusBox.textContent=text;}
 function readAsset(id){
   if(window.storeData[id])return Promise.resolve(window.storeData[id]);
-  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=9';
+  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=11';
     js.onload=()=>resolve(window.storeData[id]);js.onerror=()=>{js.remove();reject(Error('매장 자료를 열 수 없습니다. 페이지를 새로고침해 주세요.'));};document.head.append(js);});
 }
 const planLink=el('planFile');
@@ -38,7 +38,7 @@ async function openArea(id){
   planLink.download=floorPlans[id].filename;
   planLink.querySelector('span').textContent=id+'㎡ 배치도 PDF';
   el('sizeLabel').textContent=id+'㎡';el('where').textContent='입구';el('tour').disabled=true;
-  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=9)';
+  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=11)';
   view.style.visibility='hidden';message('매장을 여는 중…');closeGuide();
   try{
     if(!renderer)renderer=new StoreRenderer(view);
