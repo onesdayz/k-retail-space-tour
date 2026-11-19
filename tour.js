@@ -275,6 +275,57 @@ el('mapToggle').onclick=()=>{const show=document.body.classList.toggle('panel');
 el('closeGuide').onclick=closeGuide;
 const compactHeader=matchMedia('(max-width:760px)');
 compactHeader.addEventListener('change',()=>{closeGuide();requestRender();});
+const gallery=el('gallery');
+const galleryViews=[
+  {label:'입구 정면',file:'front'},
+  {label:'올리브영 전경',file:'angle'},
+  {label:'브랜드관 전경',file:'brand'},
+  {label:'수직 상공',file:'plan'}
+];
+const viewButtons=el('galleryViews'),galleryAreas=gallery.querySelectorAll('[data-gallery-area]');
+let galleryArea=100,galleryIndex=0;
+function selectGalleryView(index){
+  galleryIndex=index;
+  const item=galleryViews[index],label=galleryArea+'㎡ · '+item.label;
+  el('galleryImage').src=viewButtons.children[index].firstElementChild.src;
+  el('galleryImage').alt=label+' 조감도';
+  el('galleryCaption').textContent=label;
+  el('galleryCount').textContent=(index+1)+' / '+galleryViews.length;
+  Array.from(viewButtons.children).forEach((button,i)=>button.setAttribute('aria-pressed',String(index===i)));
+}
+function showGalleryArea(id,index){
+  galleryArea=id;
+  for(const button of galleryAreas)button.setAttribute('aria-pressed',String(+button.dataset.galleryArea===id));
+  galleryViews.forEach(({file},i)=>{
+    viewButtons.children[i].firstElementChild.src=gallerySources[id][file];
+  });
+  selectGalleryView(index);
+}
+const gallerySources={
+  100:{front:'assets/aerial-100-front.webp',angle:'assets/aerial-100-angle.webp',brand:'assets/aerial-100-brand.webp',plan:'assets/aerial-100-plan.webp'},
+  300:{front:'assets/aerial-300-front.webp',angle:'assets/aerial-300-angle.webp',brand:'assets/aerial-300-brand.webp',plan:'assets/aerial-300-plan.webp'}
+};
+galleryViews.forEach(({label},i)=>{
+  const button=document.createElement('button'),thumb=new Image();
+  thumb.alt='';
+  button.append(thumb,document.createTextNode(label));
+  button.onclick=()=>selectGalleryView(i);
+  viewButtons.append(button);
+});
+for(const button of galleryAreas)button.onclick=()=>showGalleryArea(+button.dataset.galleryArea,galleryIndex);
+el('openGallery').onclick=()=>{
+  resetInput();
+  showGalleryArea(area,0);
+  gallery.showModal();
+};
+el('closeGallery').onclick=()=>gallery.close();
+gallery.addEventListener('keydown',e=>{
+  if(e.key!=='ArrowRight'&&e.key!=='ArrowLeft')return;
+  e.preventDefault();
+  const count=galleryViews.length;
+  selectGalleryView((galleryIndex+(e.key==='ArrowRight'?1:-1)+count)%count);
+  viewButtons.children[galleryIndex].focus();
+});
 const help=el('instructions');
 document.querySelectorAll('footer [aria-haspopup="dialog"]').forEach(button=>{
   button.onclick=()=>{resetInput();help.showModal();};
@@ -420,7 +471,7 @@ stick.onclick=e=>{
   if(e.detail===0 && key && scene){nudge(...directions[key],.16);requestRender();}
 };
 const allowed=new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight']);
-window.addEventListener('keydown',e=>{if(e.code==='Escape')closeGuide();if(!scene||help.open||e.metaKey||e.ctrlKey||e.altKey||!allowed.has(e.code))return;e.preventDefault();keyset.add(e.code);requestRender();});
+window.addEventListener('keydown',e=>{if(e.code==='Escape')closeGuide();if(!scene||help.open||gallery.open||e.metaKey||e.ctrlKey||e.altKey||!allowed.has(e.code))return;e.preventDefault();keyset.add(e.code);requestRender();});
 window.addEventListener('keyup',e=>{if(keyset.delete(e.code)){slide=null;requestRender();}});window.addEventListener('blur',resetInput);
 document.addEventListener('visibilitychange',()=>{if(document.hidden){clearTimeout(shopperTimer);resetInput();last=0;}else requestRender();});
 window.addEventListener('resize',requestRender);
