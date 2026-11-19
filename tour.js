@@ -194,7 +194,10 @@ function lookBy(yaw,pitch){
 }
 function resetInput(){slide=null;keyset.clear();pointers.clear();clearStick();}
 function closeGuide(){document.body.classList.remove('panel');el('mapToggle').setAttribute('aria-expanded','false');}
-function requestRender(){dirty=true;if(!frame)frame=requestAnimationFrame(tick);}
+const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+let shopperTimer=0;
+reducedMotion.addEventListener('change',requestRender);
+function requestRender(){clearTimeout(shopperTimer);dirty=true;if(!frame)frame=requestAnimationFrame(tick);}
 function tick(ts){
   frame=0;const dt=last?Math.min((ts-last)/1000,.12):0;last=ts;
   if(!scene)return;
@@ -216,8 +219,13 @@ function tick(ts){
     dirty=true;
   }
   const moving=Boolean(playing||keyset.size||axis.x||axis.y||pointers.size);
-  if(dirty){renderer.draw(scene,gpu,cam,moving,dt);drawMap();dirty=false;}
-  if(playing||keyset.size||axis.x||axis.y)frame=requestAnimationFrame(tick);else last=0;
+  if(dirty){renderer.draw(scene,gpu,cam,moving,dt,reducedMotion.matches?0:ts/1000);drawMap();dirty=false;}
+  if(playing||keyset.size||axis.x||axis.y)frame=requestAnimationFrame(tick);
+  else{
+    last=0;
+    if(showShoppers&&renderer.shoppers.nearby&&!document.hidden&&!reducedMotion.matches)
+      shopperTimer=setTimeout(requestRender,125);
+  }
 }
 function makeOverview(){
   const [w,h,d]=scene.grid;overview=document.createElement('canvas');overview.width=w;overview.height=h;
@@ -415,7 +423,7 @@ stick.onclick=e=>{
 const allowed=new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight']);
 window.addEventListener('keydown',e=>{if(e.code==='Escape')closeGuide();if(!scene||help.open||e.metaKey||e.ctrlKey||e.altKey||!allowed.has(e.code))return;e.preventDefault();keyset.add(e.code);requestRender();});
 window.addEventListener('keyup',e=>{if(keyset.delete(e.code)){slide=null;requestRender();}});window.addEventListener('blur',resetInput);
-document.addEventListener('visibilitychange',()=>{if(document.hidden){resetInput();last=0;}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){clearTimeout(shopperTimer);resetInput();last=0;}else requestRender();});
 window.addEventListener('resize',requestRender);
 view.addEventListener('webglcontextlost',e=>{e.preventDefault();resetInput();scene=null;message('그래픽 화면이 중단되었습니다. 복구하는 중…');});
 view.addEventListener('webglcontextrestored',()=>{renderer=null;stores.clear();loading=false;openArea(area);});

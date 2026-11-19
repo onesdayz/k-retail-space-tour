@@ -485,7 +485,7 @@ class StoreRenderer {
     if(this.fastTime>4){this.walkScale=Math.min(1,this.walkScale+.14);this.fastTime=0;}
     return this.walkScale;
   }
-  draw(s,gpu,cam,moving=false,dt=0){
+  draw(s,gpu,cam,moving=false,dt=0,shopperTime=0){
     const gl=this.gl,cv=gl.canvas,touch=this.touchDisplay.matches;
     const scale=Math.min(devicePixelRatio||1,touch?(moving?this.motionScale(dt):1.15):1.7,(touch?1200:2100)/Math.max(cv.clientWidth,cv.clientHeight,1));
     const w=Math.max(1,Math.round(cv.clientWidth*scale)),h=Math.max(1,Math.round(cv.clientHeight*scale));
@@ -521,7 +521,7 @@ class StoreRenderer {
     };
     architecture(0);
     this.merch.draw(s,gpu.merch,cam,w,h,planes,touch&&moving);
-    if(this.showShoppers)this.shoppers.draw(s,cam,w,h);
+    if(this.showShoppers)this.shoppers.draw(s,cam,w,h,shopperTime);
     if(gpu.passes[1].some(batch=>batch.ranges.some(visible))){
       gl.activeTexture(gl.TEXTURE11);gl.bindTexture(gl.TEXTURE_2D,this.backdrop);
       if(this.backdropWidth!==w || this.backdropHeight!==h){
