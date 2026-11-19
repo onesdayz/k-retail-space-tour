@@ -172,8 +172,11 @@ function jump(i){
   setStop(i);closeGuide();requestRender();
 }
 function setPlayback(on){
-  playing=on;el('tour').setAttribute('aria-pressed',String(on));
-  el('playIcon').textContent=on?'Ⅱ':'▶';el('playText').textContent=on?'일시 정지':'동선 따라가기';
+  playing=on;
+  const autoButton=el('tour');
+  autoButton.setAttribute('aria-pressed',String(on));
+  autoButton.title=on?'자동 이동 일시 정지':'자동 이동 시작';
+  el('playIcon').textContent=on?'Ⅱ':'▶';
   stick.setAttribute('aria-label',on?'자유 방향 둘러보기':'자유 방향 이동');
   const labels=on?['위로 보기','왼쪽 보기','오른쪽 보기','아래로 보기']:['앞으로 이동','왼쪽으로 이동','오른쪽으로 이동','뒤로 이동'];
   ['up','left','right','down'].forEach((key,i)=>stick.querySelector('[data-move='+key+']').setAttribute('aria-label',labels[i]));
