@@ -21,7 +21,7 @@ header{height:76px;flex:none;display:flex;align-items:center;gap:20px;padding:0 
 .areas button{border-radius:20px;padding:7px 15px;font-weight:650;color:#d4d1c8}.areas span{margin-left:3px;font-weight:500}
 .areas button[aria-pressed=true],.play button[aria-pressed=true],dialog button{background:var(--yellow);color:var(--ink)}
 main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) clamp(244px,22vw,310px)}
-.viewer{position:relative;min-width:0;overflow:hidden;background:#292824 url(assets/entrance-100.webp?v=18) center/cover}
+.viewer{position:relative;min-width:0;overflow:hidden;background:#292824 url(assets/entrance-100.webp?v=19) center/cover}
 .viewer:after{content:"";pointer-events:none;position:absolute;inset:65% 0 0;background:linear-gradient(transparent,#10101377)}
 #view{display:block;width:100%;height:100%;touch-action:none;cursor:grab}#view:active{cursor:grabbing}
 .tools,.zoom,.place,.play,#stick{position:absolute;z-index:1}
@@ -90,3 +90,8 @@ dialog::backdrop{background:#09090bbd}dialog p{font-size:15px;line-height:1.6}di
 @media(hover:hover){#planFile:hover{background:#403421;border-color:var(--yellow)}}
 #planFile:active{background:#4d3d24}
 @media(max-height:470px){#planFile:not([hidden]){margin-top:4px}}
+
+.play{display:grid;justify-items:end;gap:8px}
+.play #musicToggle{min-height:36px;padding:0 12px;gap:6px;font-size:13px}
+#musicToggle svg{width:17px;height:17px}
+#musicToggle[aria-pressed=false] .soundOn,#musicToggle[aria-pressed=true] .soundOff{display:none}

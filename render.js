@@ -389,6 +389,10 @@ class StoreRenderer {
       }else if(mode==32){
         vec2 grain=vec2((wp.x+wp.y)*47.,wp.z*2.1);
         c=base*(.67+.14*N.z+.075*noise2(grain));
+      }else if(mode==37){
+        // The opal shell scatters the lamp across its face, with a warmer rim.
+        float core=smoothstep(0.,.92,abs(dot(N,V)));
+        c=mix(vec3(.94,.832,.65),vec3(1.,.976,.876),core);
       }else if(mode==19){
         float rim=pow(1.-abs(dot(V,N)),2.);
         c=mix(vec3(1.,.974,.866),vec3(.96,.827,.635),.57*rim+.12*(1.+N.z))+.11*glassSpec(wp,N,V);
@@ -398,12 +402,12 @@ class StoreRenderer {
         c=mix(vec3(.72,.82,.80),reflected(wp,N,.06),.83)+.32*glassSpec(wp,N,V);
         alpha=.12+.54*fresnel(V,N,.04);
       }
-      if(finish==4){
+      if(finish==4 && mode!=37){
         vec3 irradiance=texture(lightmap,vec2(st.x,1.-st.y)).rgb;
         float light=dot(irradiance,vec3(.22,.70,.08))/max(.24,dot(base,vec3(.22,.70,.08)));
         c*=clamp(.43+.56*light,.51,1.03);
       }
-      if(mode!=19 && mode!=13 && mode!=17 && mode!=8 && mode!=9 && emission<2.){
+      if(mode!=37 && mode!=19 && mode!=13 && mode!=17 && mode!=8 && mode!=9 && emission<2.){
         float gloss=(mode==36?.89:mode==14?.8:mode==10?.52:mode==2?.24:.12);
         if(mode==1||mode==23||mode==34){
           vec3 lit=ceilingLight(c,wp,N,V,.09);

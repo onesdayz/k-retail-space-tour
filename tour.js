@@ -23,8 +23,46 @@ stopButtons[0].after(stopButtons[experienceIndex]);
 function message(text){statusBox.hidden=!text;statusBox.textContent=text;}
 function readAsset(id){
   if(window.storeData[id])return Promise.resolve(window.storeData[id]);
-  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=18';
+  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=19';
     js.onload=()=>resolve(window.storeData[id]);js.onerror=()=>{js.remove();reject(Error('매장 자료를 열 수 없습니다. 페이지를 새로고침해 주세요.'));};document.head.append(js);});
+}
+const lounge=el('lounge'),musicToggle=el('musicToggle');
+const musicPreference='pavilion.lounge.enabled';
+let musicEnabled=true;
+try{musicEnabled=localStorage.getItem(musicPreference)!=='off';}catch{}
+lounge.volume=.42;
+function syncMusicButton(){
+  const on=!lounge.paused&&!lounge.error;
+  musicToggle.setAttribute('aria-pressed',String(on));
+  musicToggle.title=on?'배경음 끄기':'배경음 켜기';
+}
+function startMusic(){
+  lounge.play().catch(syncMusicButton);
+}
+function clearMusicUnlock(){
+  document.removeEventListener('click',unlockMusic);
+  document.removeEventListener('keyup',unlockMusic);
+  document.removeEventListener('pointerup',unlockMusic);
+}
+function unlockMusic(event){
+  if(event.target.closest?.('#musicToggle')||!event.isTrusted||!musicEnabled||document.hidden)return;
+  if(event.type==='keyup'&&['Tab','Shift','Control','Meta','Alt'].includes(event.key))return;
+  startMusic();
+}
+lounge.addEventListener('playing',()=>{clearMusicUnlock();syncMusicButton();});
+lounge.addEventListener('pause',syncMusicButton);
+lounge.addEventListener('error',syncMusicButton);
+musicToggle.onclick=()=>{
+  clearMusicUnlock();
+  musicEnabled=lounge.paused;
+  try{localStorage.setItem(musicPreference,musicEnabled?'on':'off');}catch{}
+  if(musicEnabled)startMusic();else lounge.pause();
+  syncMusicButton();
+};
+if(musicEnabled){
+  document.addEventListener('pointerup',unlockMusic);
+  document.addEventListener('click',unlockMusic);
+  document.addEventListener('keyup',unlockMusic);
 }
 const planLink=el('planFile');
 const floorPlans={
@@ -39,7 +77,7 @@ async function openArea(id){
   planLink.download=floorPlans[id].filename;
   planLink.querySelector('span').textContent=id+'㎡ 배치도 PDF';
   el('sizeLabel').textContent=id+'㎡';el('where').textContent='입구';el('tour').disabled=true;
-  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=18)';
+  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=19)';
   view.style.visibility='hidden';message('매장을 여는 중…');closeGuide();
   try{
     if(!renderer)renderer=new StoreRenderer(view);
