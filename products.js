@@ -106,7 +106,7 @@ class ShelfProducts {
   }
   draw(s,groups,cam,w,h){
     const gl=this.gl,u=this.u;gl.useProgram(this.program);cameraUniforms(gl,u,cam,s,w,h);
-    const a=cam.yaw*Math.PI/180,sn=Math.sin(a),cs=Math.cos(a),tanX=.614*w/h;
+    const a=cam.yaw*Math.PI/180,sn=Math.sin(a),cs=Math.cos(a),tanX=.614*w/(h*(cam.zoom||1));
     for(const {sku,instances,layers,meshes} of groups){
       const counts=[0,0,0];
       for(const instance of instances){

@@ -74,7 +74,7 @@ function cameraUniforms(gl,u,camera,room,w,h){
   const c=Math.cos(a),s=Math.sin(a),cp=Math.cos(b),sp=Math.sin(b);
   gl.uniform3f(u.eye,camera.x,camera.y,1.58);
   gl.uniform3f(u.right,c,-s,0);gl.uniform3f(u.up,-s*sp,-c*sp,cp);gl.uniform3f(u.forward,s*cp,c*cp,sp);
-  const fy=1/Math.tan(63*rad/2);gl.uniform2f(u.focal,fy*h/w,fy);gl.uniform2f(u.room,room.W,room.D);
+  const fy=(camera.zoom||1)/Math.tan(63*rad/2);gl.uniform2f(u.focal,fy*h/w,fy);gl.uniform2f(u.room,room.W,room.D);
 }
 // Depth-tested lens bloom. Each emitter uses its actual position and radius in metres.
 class CeilingGlow {
@@ -131,16 +131,17 @@ class StoreRenderer {
     const fragment=`#version 300 es
     precision highp float;in vec3 wp,n;in vec2 st;in float ao;out vec4 pixel;
     uniform vec3 base;uniform vec4 rect;uniform int mode,finish;uniform float emission;
-    uniform sampler2D atlas,floorTex,ceilTex,lightmap,atelier;
+    uniform sampler2D atlas,floorTex,ceilTex,lightmap,atelier,consultation;
     ${reflection}
     ${ceilingIllumination}
     void main(){
       vec3 N=normalize(n),V=normalize(eye-wp);float alpha=1.;
       vec3 c=base*(.77+.13*N.z+.045*N.y-.03*N.x)*(.64+.39*sqrt(ao))*vec3(1.04,1.01,.97);
       vec2 plan=wp.xy/room;
-      if(mode==1 || mode==23){
+      if(mode==1 || mode==23 || mode==34){
         vec2 printUV=rect.xy+vec2(st.x,1.-st.y)*rect.zw;
-        vec3 ink=mode==23?texture(atelier,printUV).rgb:texture(atlas,printUV).rgb;
+        vec3 ink=mode==34?texture(consultation,printUV).rgb:
+                 mode==23?texture(atelier,printUV).rgb:texture(atlas,printUV).rgb;
         c=ink*(.90+.105*ao)*vec3(1.014,1.004,.985);
         c=mix(c,reflected(wp,N,.36),.025*fresnel(V,N,.28));
       }else if(mode==2){
@@ -215,6 +216,30 @@ class StoreRenderer {
         float reflectivity=mode==25?.034:mode==26?.35:.14;
         c=mix(base*diffuse,env*(mode==26?mix(vec3(1),base,.55):vec3(1)),reflectivity+.12*fresnel(V,N,.04));
         if(mode==24)c+=vec3(.062)*pow(max(dot(N,normalize(V+vec3(-.4,.33,.84))),0.),38.);
+      }else if(mode==27){
+        // Veins follow the folded blade from petiole to tip. Fade fine detail at distance.
+        vec2 leaf=vec2(st.x,st.y*2.-1.);
+        float aa=max(fwidth(leaf.y),.009);
+        float thin=(1.-smoothstep(.02,.07,aa));
+        float midrib=1.-smoothstep(.014,.020+aa,abs(leaf.y));
+        float veins=abs(fract(leaf.x*7.4-abs(leaf.y)*1.14)-.5);
+        float ribs=(1.-smoothstep(.015,.078+fwidth(veins),veins))*(1.-abs(leaf.y))*thin;
+        vec3 blade=mix(vec3(.094,.213,.115),vec3(.32,.45,.206),ao);
+        float facing=gl_FrontFacing?1.:.84;
+        c=blade*(.66+.32*abs(N.z)+.16*max(dot(N,normalize(vec3(-.4,.4,.82))),0.))*facing;
+        c+=vec3(.084,.094,.039)*(midrib*.80+ribs*.42);
+        c+=vec3(.060,.066,.046)*pow(max(dot(faceforward(N,-V,N),normalize(V+vec3(-.38,.28,.88))),0.),22.);
+      }else if(mode==28){
+        float flute=cos(st.x*6.283185*48.);
+        float fade=1.-smoothstep(.004,.02,fwidth(st.x));
+        c=base*(.72+.22*ao+.09*N.z+.038*flute*fade+.015*noise2(wp.xy*510.));
+        c=mix(c,reflected(wp,N,.31),.13*fresnel(V,N,.11));
+      }else if(mode==29||mode==31||mode==30){
+        float speck=noise2(wp.xy*450.+wp.z*190.);
+        c=base*(.68+.15*N.z+.12*speck+.14*ao);
+      }else if(mode==32){
+        vec2 grain=vec2((wp.x+wp.y)*47.,wp.z*2.1);
+        c=base*(.67+.14*N.z+.075*noise2(grain));
       }else if(mode==19){
         float rim=pow(1.-abs(dot(V,N)),2.);
         c=mix(vec3(1.,.974,.866),vec3(.96,.827,.635),.57*rim+.12*(1.+N.z));
@@ -233,10 +258,10 @@ class StoreRenderer {
       pixel=vec4(c,alpha);
     }`;
     this.program=createProgram(gl,vertex,fragment);
-    this.u=uniforms(gl,this.program,'extent origin eye right up forward focal room base rect mode finish emission atlas floorTex ceilTex lightmap environment lightField atelier');
+    this.u=uniforms(gl,this.program,'extent origin eye right up forward focal room base rect mode finish emission atlas floorTex ceilTex lightmap environment lightField atelier consultation');
     gl.useProgram(this.program);
     ['atlas','floorTex','ceilTex','lightmap','environment'].forEach((key,i)=>gl.uniform1i(this.u[key],i));
-    gl.uniform1i(this.u.lightField,6);gl.uniform1i(this.u.atelier,7);
+    gl.uniform1i(this.u.lightField,6);gl.uniform1i(this.u.atelier,7);gl.uniform1i(this.u.consultation,8);
     gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clearColor(.85,.85,.80,1);
     this.aniso=gl.getExtension('EXT_texture_filter_anisotropic');
     this.merch=new ShelfProducts(gl);
