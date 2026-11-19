@@ -10,6 +10,7 @@ const rad=Math.PI/180, clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 let area=100,scene=null,gpu=null,renderer=null,generation=0,active=-1,loading=false;
 let cam={x:0,y:0,yaw:0,pitch:0},frame=0,dirty=false,last=0,tourTime=0,playing=false;
 const pointers=new Map();
+const lookOffset={yaw:0,pitch:0};
 let stickPress=null,slide=null,zoom=1;
 let keyset=new Set(),joy=null,axis={x:0,y:0},mapLayout=null,overview=null;
 const stores=new Map(),nav=el('stops');
@@ -32,7 +33,7 @@ const floorPlans={
 };
 async function openArea(id){
   if(loading&&id===area)return;
-  const token=++generation;area=id;loading=true;stopTour();resetInput();scene=null;
+  const token=++generation;area=id;loading=true;resetInput();scene=null;last=0;
   document.querySelectorAll('[data-area]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.area===id)));
   planLink.href=floorPlans[id].url;
   planLink.download=floorPlans[id].filename;
@@ -77,20 +78,34 @@ function zone(routeIndex=nearestIndex(scene.route,cam)){
   setStop(breaks.filter(b=>t>=b).length);
 }
 function jump(i){
-  if(!scene)return;stopTour();resetInput();
+  if(!scene)return;resetInput();
   const customView=i===experienceIndex?scene.experienceView:i===5?scene.checkoutView:null;
   const pose=customView||scene.route[Math.round(scene.stops[i]*5)];
   const [x,y,yaw,pitch]=pose;
   tourTime=i===experienceIndex?nearestIndex(scene.route,{x,y})/5:scene.stops[i];
-  const [sx,sy]=nearestSafe(x,y);cam={x:sx,y:sy,yaw,pitch,zoom};setStop(i);closeGuide();requestRender();
+  const [sx,sy]=nearestSafe(x,y);cam={x:sx,y:sy,yaw,pitch,zoom};
+  if(playing)alignTourView();
+  setStop(i);closeGuide();requestRender();
 }
-function stopTour(){
-  playing=false;el('tour').setAttribute('aria-pressed','false');el('playIcon').textContent='▶';el('playText').textContent='동선 따라가기';
+function setPlayback(on){
+  playing=on;el('tour').setAttribute('aria-pressed',String(on));
+  el('playIcon').textContent=on?'Ⅱ':'▶';el('playText').textContent=on?'일시 정지':'동선 따라가기';
+  const labels=on?['위로 보기','왼쪽 보기','오른쪽 보기','아래로 보기']:['앞으로 이동','왼쪽으로 이동','오른쪽으로 이동','뒤로 이동'];
+  ['up','left','right','down'].forEach((key,i)=>stick.querySelector('[data-move='+key+']').setAttribute('aria-label',labels[i]));
 }
-function manual(){
-  if(!scene)return;
-  if(playing){stopTour();[cam.x,cam.y]=nearestSafe(cam.x,cam.y);}
-  tourTime=nearestIndex(scene.route,cam)/5;
+function sampledPose(time){
+  const j=Math.min(scene.route.length-2,Math.floor(time*5)),f=time*5-j;
+  const a=scene.route[j],b=scene.route[j+1],turn=(b[2]-a[2]+540)%360-180;
+  return [a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+turn*f,a[3]+(b[3]-a[3])*f];
+}
+function alignTourView(){
+  const pose=sampledPose(tourTime);
+  lookOffset.yaw=cam.yaw-pose[2];lookOffset.pitch=cam.pitch-pose[3];
+}
+function lookBy(yaw,pitch){
+  const target=clamp(cam.pitch+pitch,-75,75);
+  if(playing){lookOffset.yaw+=yaw;lookOffset.pitch+=target-cam.pitch;}
+  cam.yaw+=yaw;cam.pitch=target;
 }
 function resetInput(){slide=null;keyset.clear();pointers.clear();clearStick();}
 function closeGuide(){document.body.classList.remove('panel');el('mapToggle').setAttribute('aria-expanded','false');}
@@ -99,12 +114,14 @@ function tick(ts){
   frame=0;const dt=last?Math.min((ts-last)/1000,.12):0;last=ts;
   if(!scene)return;
   if(playing){
-    const end=(scene.route.length-1)/5;tourTime=Math.min(end,tourTime+dt);
-    const j=Math.min(scene.route.length-2,Math.floor(tourTime*5)),f=tourTime*5-j;
-    const p=scene.route[j].map((v,k)=>v+(scene.route[j+1][k]-v)*f);
-    [cam.x,cam.y,cam.yaw,cam.pitch]=p;
+    const end=(scene.route.length-1)/5;tourTime=(tourTime+dt)%end;
+    const [x,y,yaw,pitch]=sampledPose(tourTime);
+    cam.x=x;cam.y=y;cam.yaw=yaw+lookOffset.yaw;cam.pitch=clamp(pitch+lookOffset.pitch,-75,75);
+    const k=key=>Number(keyset.has(key));
+    const pan=axis.x+k('KeyD')-k('KeyA')+k('ArrowRight')-k('ArrowLeft');
+    const tilt=axis.y+k('KeyW')-k('KeyS')+k('ArrowUp')-k('ArrowDown');
+    if(pan||tilt)lookBy(dt*75*pan,dt*55*tilt);
     const cuts=area===100?[7,22,33,39.5,45]:[13,32,42.5,50.5,58];setStop(cuts.filter(b=>tourTime>=b).length);
-    if(tourTime>=end){stopTour();[cam.x,cam.y]=nearestSafe(cam.x,cam.y);}
     dirty=true;
   }else if(keyset.size||axis.x||axis.y){
     const k=key=>+keyset.has(key);
@@ -147,13 +164,18 @@ function drawMap(){
 }
 map.onclick=e=>{
   if(!scene||!mapLayout)return;const r=map.getBoundingClientRect(),m=mapLayout,x=(e.clientX-r.left-m.x)/m.s,y=scene.D-(e.clientY-r.top-m.y)/m.s;
-  if(!walkable(x,y))return;manual();cam.x=x;cam.y=y;zone();tourTime=nearestIndex(scene.route,cam)/5;closeGuide();requestRender();
+  if(!walkable(x,y))return;
+  const index=nearestIndex(scene.route,{x,y});tourTime=index/5;
+  if(playing){const pose=scene.route[index];cam.x=pose[0];cam.y=pose[1];}
+  else{cam.x=x;cam.y=y;}
+  zone(index);closeGuide();requestRender();
 };
 el('tour').onclick=()=>{
   if(!scene)return;
-  if(playing){stopTour();[cam.x,cam.y]=nearestSafe(cam.x,cam.y);requestRender();return;}
-  resetInput();if(tourTime>=(scene.route.length-1)/5-.02)tourTime=0;
-  playing=true;el('tour').setAttribute('aria-pressed','true');el('playIcon').textContent='Ⅱ';el('playText').textContent='일시 정지';requestRender();
+  resetInput();
+  if(playing)setPlayback(false);
+  else{alignTourView();setPlayback(true);}
+  requestRender();
 };
 document.querySelectorAll('[data-area]').forEach(b=>b.onclick=()=>{if(+b.dataset.area!==area||!scene)openArea(+b.dataset.area);});
 el('mapToggle').onclick=()=>{const show=document.body.classList.toggle('panel');el('mapToggle').setAttribute('aria-expanded',String(show));requestRender();};
@@ -166,7 +188,7 @@ function positionHelp(){
 }
 positionHelp();
 compactHeader.addEventListener('change',()=>{positionHelp();closeGuide();requestRender();});
-const help=el('instructions');el('help').onclick=()=>{resetInput();if(playing)manual();help.showModal();};
+const help=el('instructions');el('help').onclick=()=>{resetInput();help.showModal();};
 el('dismiss').onclick=()=>help.close();
 const fs=el('full');if(!document.documentElement.requestFullscreen)fs.hidden=true;
 fs.onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{fs.hidden=true;}};
@@ -184,7 +206,7 @@ view.addEventListener('wheel',e=>{
 },{passive:false});
 view.onpointerdown=e=>{
   if(!scene||e.button!==0||pointers.size>=2)return;
-  manual();pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
   view.setPointerCapture(e.pointerId);view.focus({preventScroll:true});
 };
 view.onpointermove=e=>{
@@ -196,8 +218,7 @@ view.onpointermove=e=>{
     const before=Math.hypot(old.x-other.x,old.y-other.y),after=Math.hypot(next.x-other.x,next.y-other.y);
     if(before>2 && after>2)setZoom(zoom*after/before);
   }else{
-    cam.yaw+=(next.x-old.x)*.22;
-    cam.pitch=clamp(cam.pitch-(next.y-old.y)*.18,-75,75);
+    lookBy((next.x-old.x)*.22,-(next.y-old.y)*.18);
     requestRender();
   }
   pointers.set(e.pointerId,next);
@@ -237,6 +258,7 @@ function slideStep(nx,ny,intent,step){
 }
 function walk(side,forward,distance){
   if(!scene||(!side&&!forward)||distance<=0)return;
+  if(!walkable(cam.x,cam.y))[cam.x,cam.y]=nearestSafe(cam.x,cam.y);
   const input=Math.hypot(side,forward),a=cam.yaw*rad;
   const ux=(Math.sin(a)*forward+Math.cos(a)*side)/input;
   const uy=(Math.cos(a)*forward-Math.sin(a)*side)/input;
@@ -280,7 +302,7 @@ function dragStick(e){
 }
 stick.onpointerdown=e=>{
   if(!scene||joy!==null||e.button!==0)return;
-  manual();joy=e.pointerId;stick.setPointerCapture(joy);
+  joy=e.pointerId;stick.setPointerCapture(joy);
   const key=e.target.closest('[data-move]')?.dataset.move;
   stickPress={key,x:e.clientX,y:e.clientY,t:performance.now()};
   if(key)steer(...directions[key]);else dragStick(e);
@@ -295,20 +317,24 @@ function releaseStick(e){
   if(joy!==e.pointerId)return;
   if(e.type==='pointerup' && stickPress?.key && insideStick(e)){
     const remaining=.16-(performance.now()-stickPress.t)/1000;
-    if(remaining>0)walk(...directions[stickPress.key],remaining*1.55);
+    if(remaining>0)tapDirection(stickPress.key,remaining);
   }
   clearStick();requestRender();
 }
 stick.onpointerup=stick.onpointercancel=stick.onlostpointercapture=releaseStick;
+function tapDirection(key,seconds){
+  const [x,y]=directions[key];
+  if(playing)lookBy(x*75*seconds,y*55*seconds);else walk(x,y,seconds*1.55);
+}
 stick.onclick=e=>{
   const key=e.target.closest('[data-move]')?.dataset.move;
-  if(e.detail===0 && key && scene){manual();walk(...directions[key],.24);requestRender();}
+  if(e.detail===0 && key && scene){tapDirection(key,.16);requestRender();}
 };
 const allowed=new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight']);
-window.addEventListener('keydown',e=>{if(e.code==='Escape')closeGuide();if(!scene||help.open||e.metaKey||e.ctrlKey||e.altKey||!allowed.has(e.code))return;e.preventDefault();if(!e.repeat)manual();keyset.add(e.code);requestRender();});
+window.addEventListener('keydown',e=>{if(e.code==='Escape')closeGuide();if(!scene||help.open||e.metaKey||e.ctrlKey||e.altKey||!allowed.has(e.code))return;e.preventDefault();keyset.add(e.code);requestRender();});
 window.addEventListener('keyup',e=>{if(keyset.delete(e.code)){slide=null;requestRender();}});window.addEventListener('blur',resetInput);
 document.addEventListener('visibilitychange',()=>{if(document.hidden){resetInput();last=0;}});
 window.addEventListener('resize',requestRender);
-view.addEventListener('webglcontextlost',e=>{e.preventDefault();stopTour();resetInput();scene=null;message('그래픽 화면이 중단되었습니다. 복구하는 중…');});
+view.addEventListener('webglcontextlost',e=>{e.preventDefault();resetInput();scene=null;message('그래픽 화면이 중단되었습니다. 복구하는 중…');});
 view.addEventListener('webglcontextrestored',()=>{renderer=null;stores.clear();loading=false;openArea(area);});
 openArea(100);
