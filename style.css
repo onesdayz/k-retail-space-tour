@@ -21,7 +21,7 @@ header{height:76px;flex:none;display:flex;align-items:center;gap:20px;padding:0 
 .areas button{border-radius:20px;padding:7px 15px;font-weight:650;color:#d4d1c8}.areas span{margin-left:3px;font-weight:500}
 .areas button[aria-pressed=true],.play button[aria-pressed=true],dialog button{background:var(--yellow);color:var(--ink)}
 main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) clamp(244px,22vw,310px)}
-.viewer{position:relative;min-width:0;overflow:hidden;background:#292824 url(assets/entrance-100.webp?v=17) center/cover}
+.viewer{position:relative;min-width:0;overflow:hidden;background:#292824 url(assets/entrance-100.webp?v=18) center/cover}
 .viewer:after{content:"";pointer-events:none;position:absolute;inset:65% 0 0;background:linear-gradient(transparent,#10101377)}
 #view{display:block;width:100%;height:100%;touch-action:none;cursor:grab}#view:active{cursor:grabbing}
 .tools,.zoom,.place,.play,#stick{position:absolute;z-index:1}
@@ -46,7 +46,7 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) clamp(
 #stick [data-move=up]{top:1%;--angle:-45deg}#stick [data-move=down]{bottom:1%;--angle:135deg}
 #stick [data-move=left]{left:1%;--angle:225deg}#stick [data-move=right]{right:1%;--angle:45deg}
 #stick i{pointer-events:none;position:absolute;top:calc(50% - 8px);left:calc(50% - 8px);width:16px;height:16px;border:1px solid #8b7854;border-radius:50%;background:#554c3d}
-#stick[data-active=up] [data-move=up],#stick[data-active=down] [data-move=down],#stick[data-active=left] [data-move=left],#stick[data-active=right] [data-move=right]{background:#59482e}
+#stick[data-active] i{background:var(--gold);border-color:var(--yellow)}
 #load{position:absolute;z-index:3;left:50%;top:45%;transform:translate(-50%,-50%);border:1px solid var(--gold);border-radius:9px;background:var(--overlay);color:var(--text);padding:12px 18px;max-width:90%;width:max-content}#load[hidden]{display:none}
 aside{display:flex;flex-direction:column;overflow:hidden;min-height:0;border-left:1px solid var(--line);padding:23px;background:var(--panel)}
 .guideHead,.planbox{flex:none}.guideHead{display:flex;align-items:center;justify-content:space-between}

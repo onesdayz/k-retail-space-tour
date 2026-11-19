@@ -23,7 +23,7 @@ stopButtons[0].after(stopButtons[experienceIndex]);
 function message(text){statusBox.hidden=!text;statusBox.textContent=text;}
 function readAsset(id){
   if(window.storeData[id])return Promise.resolve(window.storeData[id]);
-  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=17';
+  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=18';
     js.onload=()=>resolve(window.storeData[id]);js.onerror=()=>{js.remove();reject(Error('매장 자료를 열 수 없습니다. 페이지를 새로고침해 주세요.'));};document.head.append(js);});
 }
 const planLink=el('planFile');
@@ -39,7 +39,7 @@ async function openArea(id){
   planLink.download=floorPlans[id].filename;
   planLink.querySelector('span').textContent=id+'㎡ 배치도 PDF';
   el('sizeLabel').textContent=id+'㎡';el('where').textContent='입구';el('tour').disabled=true;
-  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=17)';
+  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=18)';
   view.style.visibility='hidden';message('매장을 여는 중…');closeGuide();
   try{
     if(!renderer)renderer=new StoreRenderer(view);
@@ -102,6 +102,7 @@ function jump(i){
 function setPlayback(on){
   playing=on;el('tour').setAttribute('aria-pressed',String(on));
   el('playIcon').textContent=on?'Ⅱ':'▶';el('playText').textContent=on?'일시 정지':'동선 따라가기';
+  stick.setAttribute('aria-label',on?'자유 방향 둘러보기':'자유 방향 이동');
   const labels=on?['위로 보기','왼쪽 보기','오른쪽 보기','아래로 보기']:['앞으로 이동','왼쪽으로 이동','오른쪽으로 이동','뒤로 이동'];
   ['up','left','right','down'].forEach((key,i)=>stick.querySelector('[data-move='+key+']').setAttribute('aria-label',labels[i]));
 }
@@ -288,13 +289,6 @@ function walk(side,forward,distance){
   const nearest=nearestIndex(scene.route,cam);
   zone(nearest);tourTime=nearest/5;
 }
-function steer(x,y){
-  const d=Math.max(1,Math.hypot(x,y));axis={x:x/d,y:y/d};
-  knob.style.transform='translate('+axis.x*10+'px,'+(-axis.y*10)+'px)';
-  if(Math.hypot(x,y)<.12){axis={x:0,y:0};knob.style.transform='';stick.removeAttribute('data-active');}
-  else stick.dataset.active=Math.abs(axis.x)>Math.abs(axis.y)?(axis.x>0?'right':'left'):(axis.y>0?'up':'down');
-  requestRender();
-}
 function clearStick(){
   const id=joy;
   joy=null;stickPress=null;slide=null;axis={x:0,y:0};
@@ -303,46 +297,47 @@ function clearStick(){
 }
 function dragStick(e){
   const b=stickPress.bounds;
-  const x=(e.clientX-b.left-b.width/2)/(b.width*.35);
-  const y=(b.top+b.height/2-e.clientY)/(b.height*.35);
-  // Keep the last heading while crossing the centre of the pad.
-  if(Math.hypot(x,y)>=.12)steer(x,y);
+  const dx=e.clientX-b.left-b.width/2,dy=b.top+b.height/2-e.clientY;
+  const distance=Math.hypot(dx,dy);
+  // Retain the last heading through the centre until the pointer is released.
+  if(distance<4)return;
+  const reach=b.width*.33;
+  const scale=Math.max(distance,reach);
+  axis={x:dx/scale,y:dy/scale};
+  const knobTravel=b.width*.19;
+  knob.style.transform='translate('+axis.x*knobTravel+'px,'+(-axis.y*knobTravel)+'px)';
+  stick.dataset.active='true';
+  requestRender();
 }
 stick.onpointerdown=e=>{
   if(!scene||joy!==null||e.button!==0)return;
   if(e.pointerType==='touch')e.preventDefault();
   joy=e.pointerId;stick.setPointerCapture(joy);
-  const key=e.target.closest('[data-move]')?.dataset.move;
-  stickPress={key,t:performance.now(),bounds:stick.getBoundingClientRect()};
-  if(key)steer(...directions[key]);else dragStick(e);
+  stickPress={bounds:stick.getBoundingClientRect(),startX:e.clientX,startY:e.clientY,
+             time:performance.now(),dragged:false};
+  dragStick(e);
 };
 stick.oncontextmenu=e=>e.preventDefault();
 stick.onpointermove=e=>{
   if(joy!==e.pointerId||!stickPress)return;
-  if(!stickPress.key){dragStick(e);return;}
-  // Capture keeps the pressed arrow active anywhere on screen. Passing directly
-  // over a different arrow lets the visitor steer without lifting their finger.
-  const next=document.elementFromPoint(e.clientX,e.clientY)?.closest('#stick [data-move]')?.dataset.move;
-  if(next&&next!==stickPress.key){
-    stickPress.key=next;steer(...directions[next]);
-  }
+  if(Math.hypot(e.clientX-stickPress.startX,e.clientY-stickPress.startY)>5)stickPress.dragged=true;
+  dragStick(e);
 };
 function releaseStick(e){
   if(joy!==e.pointerId)return;
-  if(e.type==='pointerup' && stickPress?.key){
-    const remaining=.16-(performance.now()-stickPress.t)/1000;
-    if(remaining>0)tapDirection(stickPress.key,remaining);
+  if(e.type==='pointerup' && stickPress && !stickPress.dragged){
+    const remaining=.16-(performance.now()-stickPress.time)/1000;
+    if(remaining>0)nudge(axis.x,axis.y,remaining);
   }
   clearStick();requestRender();
 }
 stick.onpointerup=stick.onpointercancel=stick.onlostpointercapture=releaseStick;
-function tapDirection(key,seconds){
-  const [x,y]=directions[key];
+function nudge(x,y,seconds){
   if(playing)lookBy(x*75*seconds,y*55*seconds);else walk(x,y,seconds*1.55);
 }
 stick.onclick=e=>{
   const key=e.target.closest('[data-move]')?.dataset.move;
-  if(e.detail===0 && key && scene){tapDirection(key,.16);requestRender();}
+  if(e.detail===0 && key && scene){nudge(...directions[key],.16);requestRender();}
 };
 const allowed=new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight']);
 window.addEventListener('keydown',e=>{if(e.code==='Escape')closeGuide();if(!scene||help.open||e.metaKey||e.ctrlKey||e.altKey||!allowed.has(e.code))return;e.preventDefault();keyset.add(e.code);requestRender();});

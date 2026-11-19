@@ -392,6 +392,7 @@ class StoreRenderer {
       }else if(mode==19){
         float rim=pow(1.-abs(dot(V,N)),2.);
         c=mix(vec3(1.,.974,.866),vec3(.96,.827,.635),.57*rim+.12*(1.+N.z))+.11*glassSpec(wp,N,V);
+        c*=pow(emission,1./2.2);
       }else if(mode==8||emission>2.){c=vec3(1.,.965,.854);}
       else if(mode==9){
         c=mix(vec3(.72,.82,.80),reflected(wp,N,.06),.83)+.32*glassSpec(wp,N,V);
