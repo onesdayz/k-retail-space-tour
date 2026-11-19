@@ -92,6 +92,8 @@ dialog::backdrop{background:#09090bbd}dialog p{font-size:15px;line-height:1.6}di
 @media(max-height:470px){#planFile:not([hidden]){margin-top:4px}}
 
 .play{display:grid;justify-items:end;gap:8px}
-.play #musicToggle{min-height:36px;padding:0 12px;gap:6px;font-size:13px}
-#musicToggle svg{width:17px;height:17px}
+.play .iconControl{width:44px;height:44px;padding:0;justify-content:center;border-radius:50%}
+.iconControl svg{width:20px;height:20px}
+#peopleToggle[aria-pressed=true] .peopleOff{display:none}
+@media(max-height:600px){.play{grid-template-columns:44px auto;gap:4px 8px}.play .iconControl{grid-column:1}.play #tour{grid-column:2;grid-row:1/3;align-self:end}}
 #musicToggle[aria-pressed=false] .soundOn,#musicToggle[aria-pressed=true] .soundOff{display:none}

@@ -26,6 +26,22 @@ function readAsset(id){
   return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=19';
     js.onload=()=>resolve(window.storeData[id]);js.onerror=()=>{js.remove();reject(Error('매장 자료를 열 수 없습니다. 페이지를 새로고침해 주세요.'));};document.head.append(js);});
 }
+const peopleToggle=el('peopleToggle');
+const peoplePreference='pavilion.shoppers.visible';
+let showShoppers=true;
+try{showShoppers=localStorage.getItem(peoplePreference)!=='off';}catch{}
+function syncPeopleButton(){
+  peopleToggle.setAttribute('aria-pressed',String(showShoppers));
+  peopleToggle.title=showShoppers?'쇼핑객 숨기기':'쇼핑객 보기';
+}
+syncPeopleButton();
+peopleToggle.onclick=()=>{
+  showShoppers=!showShoppers;
+  if(renderer)renderer.showShoppers=showShoppers;
+  try{localStorage.setItem(peoplePreference,showShoppers?'on':'off');}catch{}
+  syncPeopleButton();
+  requestRender();
+};
 const lounge=el('lounge'),musicToggle=el('musicToggle');
 const musicPreference='pavilion.lounge.enabled';
 let musicEnabled=true;
@@ -61,7 +77,7 @@ function clearMusicUnlock(){
   document.removeEventListener('pointerup',unlockMusic);
 }
 function unlockMusic(event){
-  if(event.target.closest?.('#musicToggle')||!event.isTrusted||!musicEnabled||document.hidden)return;
+  if(event.target.closest?.('#musicToggle,#peopleToggle')||!event.isTrusted||!musicEnabled||document.hidden)return;
   if(event.type==='keyup'&&['Tab','Shift','Control','Meta','Alt'].includes(event.key))return;
   startMusic();
 }
@@ -98,6 +114,7 @@ async function openArea(id){
   view.style.visibility='hidden';message('매장을 여는 중…');closeGuide();
   try{
     if(!renderer)renderer=new StoreRenderer(view);
+    renderer.showShoppers=showShoppers;
     const owner=renderer;
     if(owner.touchDisplay.matches){
       for(const [other,pending] of stores){

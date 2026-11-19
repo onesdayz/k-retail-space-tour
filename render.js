@@ -434,15 +434,19 @@ class StoreRenderer {
     this.touchDisplay=matchMedia('(pointer: coarse)');
     this.merch=new ShelfProducts(gl);
     this.glow=new CeilingGlow(gl);
+    this.shoppers=new ShopperLayer(gl);
+    this.showShoppers=true;
   }
   async prepare(s){
     const gl=this.gl,packed=Uint8Array.from(atob(s.geo),c=>c.charCodeAt(0));
     const binary=new Response(new Blob([packed]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
     const urls=s.images.map((url,i)=>this.touchDisplay.matches?(s.mobileImages?.[i]||url):url);
-    const imgs=await Promise.all(urls.map(url=>new Promise((resolve,reject)=>{
+    const shopReady=this.shoppers.load();
+    const imagesReady=Promise.all(urls.map(url=>new Promise((resolve,reject)=>{
       const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('매장 재질을 불러오지 못했습니다. 새로고침해 주세요.'));img.src=url;
     })));
-    const bytes=await binary,vao=gl.createVertexArray();gl.bindVertexArray(vao);
+    const [imgs,bytes]=await Promise.all([imagesReady,binary,shopReady]);
+    const vao=gl.createVertexArray();gl.bindVertexArray(vao);
     const vbo=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vbo);gl.bufferData(gl.ARRAY_BUFFER,bytes,gl.STATIC_DRAW);
     for(const [idx,count,type,offset] of [[0,3,gl.UNSIGNED_SHORT,0],[1,3,gl.BYTE,6],[2,2,gl.UNSIGNED_SHORT,10],[3,1,gl.UNSIGNED_BYTE,9]]){
       gl.enableVertexAttribArray(idx);gl.vertexAttribPointer(idx,count,type,true,14,offset);
@@ -517,6 +521,7 @@ class StoreRenderer {
     };
     architecture(0);
     this.merch.draw(s,gpu.merch,cam,w,h,planes,touch&&moving);
+    if(this.showShoppers)this.shoppers.draw(s,cam,w,h);
     if(gpu.passes[1].some(batch=>batch.ranges.some(visible))){
       gl.activeTexture(gl.TEXTURE11);gl.bindTexture(gl.TEXTURE_2D,this.backdrop);
       if(this.backdropWidth!==w || this.backdropHeight!==h){
