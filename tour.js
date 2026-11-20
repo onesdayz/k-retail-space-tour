@@ -134,7 +134,9 @@ async function openArea(id){
       pending.catch(()=>{if(stores.get(id)===pending)stores.delete(id);});
     }
     const result=await stores.get(id);if(token!==generation)return;
-    scene=result.data;gpu=result.buffers;loading=false;active=-1;makeOverview();jump(0);
+    scene=result.data;gpu=result.buffers;loading=false;active=-1;
+    owner.shoppers.selectArea(id);
+    makeOverview();jump(0);
     view.style.visibility='visible';el('tour').disabled=false;message('');requestRender();
   }catch(e){if(token===generation){loading=false;message(e.message||'매장을 열 수 없습니다. 페이지를 새로고침해 주세요.');}}
 }
@@ -168,7 +170,7 @@ function jump(i){
   const [x,y,yaw,pitch]=pose;
   tourTime=i===experienceIndex?nearestIndex(scene.route,{x,y})/5:scene.stops[i];
   const [sx,sy]=nearestSafe(x,y);cam={x:sx,y:sy,yaw,pitch,zoom};
-  if(playing)alignTourView();
+  if(playing)resetTourLook();
   setStop(i);closeGuide();requestRender();
 }
 function setPlayback(on){
@@ -181,14 +183,20 @@ function setPlayback(on){
   const labels=on?['위로 보기','왼쪽 보기','오른쪽 보기','아래로 보기']:['앞으로 이동','왼쪽으로 이동','오른쪽으로 이동','뒤로 이동'];
   ['up','left','right','down'].forEach((key,i)=>stick.querySelector('[data-move='+key+']').setAttribute('aria-label',labels[i]));
 }
-function sampledPose(time){
-  const j=Math.min(scene.route.length-2,Math.floor(time*5)),f=time*5-j;
-  const a=scene.route[j],b=scene.route[j+1],turn=(b[2]-a[2]+540)%360-180;
-  return [a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+turn*f,a[3]+(b[3]-a[3])*f];
+function routeHeading(route,index){
+  // The symmetric window smooths turns and supplies a direction during brief stops.
+  const a=route[Math.max(0,index-2)],b=route[Math.min(route.length-1,index+2)];
+  return Math.atan2(b[0]-a[0],b[1]-a[1])/rad;
 }
-function alignTourView(){
-  const pose=sampledPose(tourTime);
-  lookOffset.yaw=cam.yaw-pose[2];lookOffset.pitch=cam.pitch-pose[3];
+function sampledPose(time){
+  const route=scene.route;
+  const j=Math.min(route.length-2,Math.floor(time*5)),f=time*5-j;
+  const a=route[j],b=route[j+1],heading=routeHeading(route,j);
+  const turn=(routeHeading(route,j+1)-heading+540)%360-180;
+  return [a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,heading+turn*f,-2];
+}
+function resetTourLook(){
+  lookOffset.yaw=0;lookOffset.pitch=0;
 }
 function lookBy(yaw,pitch){
   const target=clamp(cam.pitch+pitch,-75,75);
@@ -262,7 +270,7 @@ map.onclick=e=>{
   if(!scene||!mapLayout)return;const r=map.getBoundingClientRect(),m=mapLayout,x=(e.clientX-r.left-m.x)/m.s,y=scene.D-(e.clientY-r.top-m.y)/m.s;
   if(!walkable(x,y))return;
   const index=nearestIndex(scene.route,{x,y});tourTime=index/5;
-  if(playing){const pose=scene.route[index];cam.x=pose[0];cam.y=pose[1];}
+  if(playing){const pose=scene.route[index];cam.x=pose[0];cam.y=pose[1];resetTourLook();}
   else{cam.x=x;cam.y=y;}
   zone(index);closeGuide();requestRender();
 };
@@ -270,7 +278,7 @@ el('tour').onclick=()=>{
   if(!scene)return;
   resetInput();
   if(playing)setPlayback(false);
-  else{alignTourView();setPlayback(true);}
+  else{resetTourLook();setPlayback(true);}
   requestRender();
 };
 document.querySelectorAll('[data-area]').forEach(b=>b.onclick=()=>{if(+b.dataset.area!==area||!scene)openArea(+b.dataset.area);});
