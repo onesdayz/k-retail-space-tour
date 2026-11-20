@@ -1,4 +1,10 @@
 // Metres on the floor plan. Facing uses the same clockwise-from-north angle as the camera.
+const paymentLook=9;
+// Customer side of the POS counter, facing the terminal.
+const checkoutPose={
+  100:{x:6.88,y:2.50,facing:206},
+  300:{x:10.85,y:4.86,facing:180}
+};
 const shoppersByArea={
   100:[
     {look:0,x:2.43,y:2.36,facing:212,height:1.64},
@@ -14,7 +20,7 @@ const shoppersByArea={
     {look:11,x:5.75,y:11.41,facing:29,height:1.80},
     {look:6,x:5.37,y:8.33,facing:146,height:1.68},
     {look:8,x:5.61,y:4.83,facing:157,height:1.66},
-    {look:5,x:1.36,y:2.62,facing:168,height:1.64}
+    {...checkoutPose[100],look:paymentLook,height:1.65}
   ],
   300:[
     {look:0,x:4.65,y:2.39,facing:220,height:1.64},
@@ -26,14 +32,14 @@ const shoppersByArea={
     {look:6,x:1.1,y:9.25,facing:273,height:1.69},
     {look:7,x:12.85,y:18.94,facing:90,height:1.68},
     {look:8,x:9.76,y:7.66,facing:38,height:1.66},
-    {look:9,x:9.79,y:4.83,facing:147,height:1.65},
+    {...checkoutPose[300],look:paymentLook,height:1.65},
     {look:10,x:1.30,y:5.85,facing:270,height:1.83},
     {look:7,x:1.42,y:10.76,facing:275,height:1.71},
     {look:1,x:5.12,y:11.22,facing:12,height:1.66},
     {look:6,x:1.67,y:17.84,facing:310,height:1.69},
     {look:11,x:6.92,y:16.32,facing:96,height:1.80},
     {look:0,x:10.18,y:16.24,facing:14,height:1.64},
-    {look:9,x:11.75,y:11.31,facing:353,height:1.69},
+    {look:4,x:11.75,y:11.31,facing:353,height:1.69},
     {look:2,x:7.92,y:6.63,facing:13,height:1.67},
     {look:10,x:7.13,y:1.55,facing:304,height:1.82},
     {look:8,x:7.04,y:20.04,facing:7,height:1.66}
@@ -65,12 +71,16 @@ const shopperStances=[
 const shopperAtlasColumns=14;
 
 class ShopperLayer{
-  constructor(gl){
+  constructor(gl,onDetailReady,detailLimit){
     this.gl=gl;
     this.people=[];
+    this.onDetailReady=onDetailReady;
+    this.detailLimit=detailLimit;
+    this.details=new Map();
+    this.retryAfter=new Map();
     const vertex=`#version 300 es
       uniform vec4 pose; // floor x, floor y, height, facing (radians)
-      uniform int look,shadow,seated;
+      uniform int look,shadow,seated,detail;
       uniform float aspect,time;
       uniform vec4 motion; // forward lean, lift, lateral shift, tempo
       uniform vec3 stance; // forward lean, weight shift, waist height
@@ -93,7 +103,8 @@ class ShopperLayer{
           float angle=acos(clamp(dot(facing,toEye),-1.,1.));
           float row=floor(angle/0.78539816+.5);
           float u=dot(facing,across)<0.?1.-corner.x:corner.x;
-          uv=(vec2(float(look),row)+vec2(u,1.-corner.y))/vec2(${shopperAtlasColumns}.,5.);
+          uv=detail==1 ? vec2((row+u)/5.,1.-corner.y)
+                       : (vec2(float(look),row)+vec2(u,1.-corner.y))/vec2(${shopperAtlasColumns}.,5.);
           vec2 side=vec2(facing.y,-facing.x);
           float phase=time*motion.w+float(look)*2.12+pose.x*1.47+pose.y*.54;
           float gesture=smoothstep(-.65,.85,sin(phase));
@@ -133,7 +144,7 @@ class ShopperLayer{
         }
       }`;
     this.program=createProgram(gl,vertex,fragment);
-    this.u=uniforms(gl,this.program,'eye right up forward focal room pose aspect time motion stance look shadow seated portraits lightField displayField');
+    this.u=uniforms(gl,this.program,'eye right up forward focal room pose aspect time motion stance look shadow seated detail portraits lightField displayField');
     gl.useProgram(this.program);
     gl.uniform1i(this.u.portraits,12);gl.uniform1i(this.u.lightField,6);gl.uniform1i(this.u.displayField,9);
     this.vao=gl.createVertexArray();
@@ -148,21 +159,58 @@ class ShopperLayer{
       return {...person,variant,style,cell,angle:facing*Math.PI/180,stance,seated:person.look===3?1:0};
     });
   }
-  load(){
-    if(this.ready)return this.ready;
+  async loadPortrait(url){
     const img=new Image();
-    img.src='assets/shoppers.webp?v=28';
-    this.ready=img.decode().then(()=>{
-      const gl=this.gl;
-      this.texture=gl.createTexture();gl.activeTexture(gl.TEXTURE12);gl.bindTexture(gl.TEXTURE_2D,this.texture);
-      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
-      gl.generateMipmap(gl.TEXTURE_2D);
-      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
-      for(const axis of [gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D,axis,gl.CLAMP_TO_EDGE);
-      gl.activeTexture(gl.TEXTURE0);
-    }).catch(error=>{this.ready=null;throw error;});
+    img.src=url;
+    await img.decode();
+    const gl=this.gl;
+    const texture=gl.createTexture();
+    gl.activeTexture(gl.TEXTURE12);
+    gl.bindTexture(gl.TEXTURE_2D,texture);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    for(const axis of [gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D,axis,gl.CLAMP_TO_EDGE);
+    gl.activeTexture(gl.TEXTURE0);
+    return texture;
+  }
+  load(){
+    if(!this.ready){
+      this.ready=this.loadPortrait('assets/shoppers.webp?v=32').then(texture=>{
+        this.texture=texture;
+      }).catch(error=>{this.ready=null;throw error;});
+    }
     return this.ready;
+  }
+  requestDetails(visible,cam,h){
+    if(this.loadingDetail||!visible.length)return;
+    // Allocate detail to the largest on-screen figures first, including when zoomed.
+    const sizes=new Map();
+    for(const person of visible){
+      const distance=Math.max(.25,Math.hypot(person.x-cam.x,person.y-cam.y));
+      const pixels=h*(cam.zoom||1)*person.height/(1.226*distance);
+      if(pixels>200)sizes.set(person.cell,Math.max(sizes.get(person.cell)||0,pixels));
+    }
+    const wanted=[...sizes.keys()].sort((a,b)=>sizes.get(b)-sizes.get(a)).slice(0,this.detailLimit);
+    const cell=wanted.find(id=>!this.details.has(id)&&performance.now()>=(this.retryAfter.get(id)??0));
+    if(cell===undefined)return;
+    this.loadingDetail=true;
+    const url='assets/shopper-detail-'+String(cell).padStart(2,'0')+'.webp?v=32';
+    this.loadPortrait(url).then(texture=>{
+      if(this.details.size>=this.detailLimit){
+        const unused=[...this.details.keys()].find(id=>!wanted.includes(id));
+        this.gl.deleteTexture(this.details.get(unused));
+        this.details.delete(unused);
+      }
+      this.details.set(cell,texture);
+      this.retryAfter.delete(cell);
+    }).catch(()=>{
+      this.retryAfter.set(cell,performance.now()+30000);
+    }).finally(()=>{
+      this.loadingDetail=false;
+      this.onDetailReady();
+    });
   }
   draw(scene,cam,w,h,time){
     const gl=this.gl,u=this.u;
@@ -176,6 +224,7 @@ class ShopperLayer{
       if(onScreen&&dx*dx+dy*dy<49)this.nearby=true;
       return onScreen;
     });
+    this.requestDetails(visible,cam,h);
     gl.useProgram(this.program);gl.bindVertexArray(this.vao);
     gl.uniform1f(u.time,time);
     cameraUniforms(gl,u,cam,scene,w,h);
@@ -184,6 +233,11 @@ class ShopperLayer{
     for(const shadow of [1,0]){
       gl.depthMask(!shadow);gl.uniform1i(u.shadow,shadow);
       for(const person of visible){
+        if(!shadow){
+          const detail=this.details.get(person.cell);
+          gl.bindTexture(gl.TEXTURE_2D,detail||this.texture);
+          gl.uniform1i(u.detail,detail?1:0);
+        }
         gl.uniform4f(u.pose,person.x,person.y,person.height,person.angle);
         gl.uniform1f(u.aspect,person.style.aspect);gl.uniform4fv(u.motion,person.style.motion);
         gl.uniform3fv(u.stance,person.stance);

@@ -241,7 +241,7 @@ function visibleBox(planes,x,y,z,hx,hy,hz){
   return true;
 }
 class StoreRenderer {
-  constructor(canvas) {
+  constructor(canvas,onDetailReady=()=>{}) {
     const gl=this.gl=canvas.getContext('webgl2',{alpha:false,antialias:true,powerPreference:'high-performance'});
     if(!gl)throw Error('WebGL 2를 지원하는 Chrome 또는 Safari에서 열어주세요.');
     const vertex=`#version 300 es
@@ -434,7 +434,7 @@ class StoreRenderer {
     this.touchDisplay=matchMedia('(pointer: coarse)');
     this.merch=new ShelfProducts(gl);
     this.glow=new CeilingGlow(gl);
-    this.shoppers=new ShopperLayer(gl);
+    this.shoppers=new ShopperLayer(gl,onDetailReady,this.touchDisplay.matches?3:5);
     this.showShoppers=true;
   }
   async prepare(s){

@@ -113,7 +113,7 @@ async function openArea(id){
   document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=31)';
   view.style.visibility='hidden';message('매장을 여는 중…');closeGuide();
   try{
-    if(!renderer)renderer=new StoreRenderer(view);
+    if(!renderer)renderer=new StoreRenderer(view,requestRender);
     renderer.showShoppers=showShoppers;
     const owner=renderer;
     if(owner.touchDisplay.matches){
