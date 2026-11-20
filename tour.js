@@ -23,7 +23,7 @@ stopButtons[0].after(stopButtons[experienceIndex]);
 function message(text){statusBox.hidden=!text;statusBox.textContent=text;}
 function readAsset(id){
   if(window.storeData[id])return Promise.resolve(window.storeData[id]);
-  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=30';
+  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=31';
     js.onload=()=>resolve(window.storeData[id]);js.onerror=()=>{js.remove();reject(Error('매장 자료를 열 수 없습니다. 페이지를 새로고침해 주세요.'));};document.head.append(js);});
 }
 const peopleToggle=el('peopleToggle');
@@ -110,7 +110,7 @@ async function openArea(id){
   planLink.download=floorPlans[id].filename;
   planLink.querySelector('span').textContent=id+'㎡ 배치도 PDF';
   el('sizeLabel').textContent=id+'㎡';el('where').textContent='입구';el('tour').disabled=true;
-  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=30)';
+  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=31)';
   view.style.visibility='hidden';message('매장을 여는 중…');closeGuide();
   try{
     if(!renderer)renderer=new StoreRenderer(view);
@@ -315,13 +315,13 @@ function showGalleryArea(id,index){
   selectGalleryView(index);
 }
 const gallerySources={
-  100:{front:'assets/aerial-100-front.webp?v=30',angle:'assets/aerial-100-angle.webp?v=30',brand:'assets/aerial-100-brand.webp?v=30',plan:'assets/aerial-100-plan.webp?v=30',
-    'front-section':'assets/aerial-100-front-section.webp?v=30',
-    'side-section':'assets/aerial-100-side-section.webp?v=30'
+  100:{front:'assets/aerial-100-front.webp?v=31',angle:'assets/aerial-100-angle.webp?v=31',brand:'assets/aerial-100-brand.webp?v=31',plan:'assets/aerial-100-plan.webp?v=31',
+    'front-section':'assets/aerial-100-front-section.webp?v=31',
+    'side-section':'assets/aerial-100-side-section.webp?v=31'
   },
-  300:{front:'assets/aerial-300-front.webp?v=30',angle:'assets/aerial-300-angle.webp?v=30',brand:'assets/aerial-300-brand.webp?v=30',plan:'assets/aerial-300-plan.webp?v=30',
-    'front-section':'assets/aerial-300-front-section.webp?v=30',
-    'side-section':'assets/aerial-300-side-section.webp?v=30'
+  300:{front:'assets/aerial-300-front.webp?v=31',angle:'assets/aerial-300-angle.webp?v=31',brand:'assets/aerial-300-brand.webp?v=31',plan:'assets/aerial-300-plan.webp?v=31',
+    'front-section':'assets/aerial-300-front-section.webp?v=31',
+    'side-section':'assets/aerial-300-side-section.webp?v=31'
   }
 };
 galleryViews.forEach(({label},i)=>{
