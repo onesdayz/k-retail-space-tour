@@ -4,7 +4,7 @@ const el=id=>document.getElementById(id);
 document.addEventListener('pointerdown',()=>{document.documentElement.dataset.input='pointer';},true);
 document.addEventListener('keydown',()=>{document.documentElement.dataset.input='keyboard';},true);
 const view=el('view'),map=el('map'),statusBox=el('load');
-const names=['입구','올리브영','중소 브랜드 A–D','종근당건강','WZ바이오','결제·포장','공용 체험·기획전'];
+const names=['입구','루네브라','중소 브랜드 A–D','종근당건강','WZ바이오','결제·포장','공용 체험·기획전'];
 const colors=['#aaa69b','#c5b888','#b79570','#e0b250','#a49dba','#c5b49a','#bf8663'];
 const rad=Math.PI/180, clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 let area=100,scene=null,gpu=null,renderer=null,generation=0,active=-1,loading=false;
@@ -23,7 +23,7 @@ stopButtons[0].after(stopButtons[experienceIndex]);
 function message(text){statusBox.hidden=!text;statusBox.textContent=text;}
 function readAsset(id){
   if(window.storeData[id])return Promise.resolve(window.storeData[id]);
-  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=19';
+  return new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='assets/store-'+id+'.js?v=29';
     js.onload=()=>resolve(window.storeData[id]);js.onerror=()=>{js.remove();reject(Error('매장 자료를 열 수 없습니다. 페이지를 새로고침해 주세요.'));};document.head.append(js);});
 }
 const peopleToggle=el('peopleToggle');
@@ -110,7 +110,7 @@ async function openArea(id){
   planLink.download=floorPlans[id].filename;
   planLink.querySelector('span').textContent=id+'㎡ 배치도 PDF';
   el('sizeLabel').textContent=id+'㎡';el('where').textContent='입구';el('tour').disabled=true;
-  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=19)';
+  document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=29)';
   view.style.visibility='hidden';message('매장을 여는 중…');closeGuide();
   try{
     if(!renderer)renderer=new StoreRenderer(view);
@@ -289,7 +289,7 @@ compactHeader.addEventListener('change',()=>{closeGuide();requestRender();});
 const gallery=el('gallery');
 const galleryViews=[
   {label:'입구 정면',file:'front'},
-  {label:'올리브영 전경',file:'angle'},
+  {label:'루네브라 전경',file:'angle'},
   {label:'브랜드관 전경',file:'brand'},
   {label:'수직 상공',file:'plan'},
   {label:'정면 단면',file:'front-section'},
@@ -315,13 +315,13 @@ function showGalleryArea(id,index){
   selectGalleryView(index);
 }
 const gallerySources={
-  100:{front:'assets/aerial-100-front.webp',angle:'assets/aerial-100-angle.webp',brand:'assets/aerial-100-brand.webp',plan:'assets/aerial-100-plan.webp',
-    'front-section':'assets/aerial-100-front-section.webp',
-    'side-section':'assets/aerial-100-side-section.webp'
+  100:{front:'assets/aerial-100-front.webp?v=29',angle:'assets/aerial-100-angle.webp?v=29',brand:'assets/aerial-100-brand.webp?v=29',plan:'assets/aerial-100-plan.webp?v=29',
+    'front-section':'assets/aerial-100-front-section.webp?v=29',
+    'side-section':'assets/aerial-100-side-section.webp?v=29'
   },
-  300:{front:'assets/aerial-300-front.webp',angle:'assets/aerial-300-angle.webp',brand:'assets/aerial-300-brand.webp',plan:'assets/aerial-300-plan.webp',
-    'front-section':'assets/aerial-300-front-section.webp',
-    'side-section':'assets/aerial-300-side-section.webp'
+  300:{front:'assets/aerial-300-front.webp?v=29',angle:'assets/aerial-300-angle.webp?v=29',brand:'assets/aerial-300-brand.webp?v=29',plan:'assets/aerial-300-plan.webp?v=29',
+    'front-section':'assets/aerial-300-front-section.webp?v=29',
+    'side-section':'assets/aerial-300-side-section.webp?v=29'
   }
 };
 galleryViews.forEach(({label},i)=>{

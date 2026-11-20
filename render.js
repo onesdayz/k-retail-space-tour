@@ -339,7 +339,7 @@ class StoreRenderer {
       }else if(mode==12){
         c=vec3(.096,.117,.112)*(.80+.26*ao+.12*N.z)+.16*reflected(wp,N,.46);
       }else if(mode==13){c=vec3(.977,1.,.991);}
-      else if(mode==15){c=vec3(.066,.79,.28)*(.82+.17*ao);}
+      else if(mode==15){c=mix(vec3(.34,.19,.58),vec3(.74,.43,.64),smoothstep(.08,1.,wp.y/room.y))*(.82+.17*ao);}
       else if(mode==17){c=vec3(1.,.94,.79);}
       else if(mode==18){
         c=mix(vec3(.51,.32,.18)*(.72+.24*ao),reflected(wp,N,.30)*vec3(1.,.81,.61),.26);
