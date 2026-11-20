@@ -353,14 +353,17 @@ el('dismiss').onclick=()=>help.close();
 const fs=el('full');if(!document.documentElement.requestFullscreen)fs.hidden=true;
 fs.onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{fs.hidden=true;}};
 document.addEventListener('fullscreenchange',()=>{fs.setAttribute('aria-label',document.fullscreenElement?'전체 화면 종료':'전체 화면');requestRender();});
+const zoomSteps=[0.7,0.8,1,1.25,1.5,2,2.5];
+const descendingZoomSteps=[...zoomSteps].reverse();
+const minZoom=zoomSteps[0],maxZoom=descendingZoomSteps[0];
 function setZoom(value){
-  zoom=clamp(value,.7,2.5);cam.zoom=zoom;
+  zoom=clamp(value,minZoom,maxZoom);cam.zoom=zoom;
   el('zoomLevel').textContent=Number(zoom.toFixed(2))+'×';
-  el('zoomIn').disabled=zoom>=2.5;el('zoomOut').disabled=zoom<=.7;
+  el('zoomIn').disabled=zoom>=maxZoom;el('zoomOut').disabled=zoom<=minZoom;
   requestRender();
 }
-el('zoomIn').onclick=()=>setZoom(zoom*1.25);
-el('zoomOut').onclick=()=>setZoom(zoom/1.25);
+el('zoomIn').onclick=()=>setZoom(zoomSteps.find(step=>step>Number(zoom.toFixed(2)))??maxZoom);
+el('zoomOut').onclick=()=>setZoom(descendingZoomSteps.find(step=>step<Number(zoom.toFixed(2)))??minZoom);
 view.addEventListener('wheel',e=>{
   if(e.ctrlKey && scene){e.preventDefault();setZoom(zoom*Math.exp(-e.deltaY*.01));}
 },{passive:false});
