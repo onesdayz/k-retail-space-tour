@@ -48,18 +48,18 @@ const shoppersByArea={
 
 // Portrait proportions and upper-body motion for each shopping gesture.
 const shopperLooks=[
-  {aspect:0.414,motion:[0.014, 0.006, 0.007, 0.95]}, // Smell a scent strip
-  {aspect:0.487,motion:[0.023, -0.009, 0.01, 1.1]}, // Swatch a lip tint
-  {aspect:0.939,motion:[0.035, 0.005, 0.008, 0.79]}, // Offer a sample
-  {aspect:1.184,motion:[0.05, -0.04, 0.009, 0.74]}, // Inspect the lower shelf
-  {aspect:0.463,motion:[0.015, 0.021, 0.017, 0.87]}, // Frame a product photo
-  {aspect:0.797,motion:[0.032, 0.009, 0.013, 0.79]}, // Receive the sample
-  {aspect:0.748,motion:[0.047, 0.034, 0.005, 0.93]}, // Reach for a carton
-  {aspect:0.492,motion:[0.016, 0.008, 0.018, 0.91]}, // Check a compact mirror
-  {aspect:0.736,motion:[0.046, -0.033, 0.01, 1.02]}, // Pack a shopping tote
-  {aspect:0.976,motion:[0.042, -0.009, 0.011, 0.83]}, // Present a payment card
-  {aspect:0.54,motion:[0.028, 0.009, 0.018, 0.83],cells:[10,11]}, // Read a carton / adjust a sleeve
-  {aspect:0.78,motion:[0.022, -0.008, 0.017, 1.07],cells:[12,13]} // Check a phone / gesture to the shelf
+  {motion:[0.014, 0.006, 0.007, 0.95]}, // Smell a scent strip
+  {motion:[0.023, -0.009, 0.01, 1.1]}, // Swatch a lip tint
+  {motion:[0.035, 0.005, 0.008, 0.79]}, // Offer a sample
+  {motion:[0.05, -0.04, 0.009, 0.74]}, // Inspect the lower shelf
+  {motion:[0.015, 0.021, 0.017, 0.87]}, // Frame a product photo
+  {motion:[0.032, 0.009, 0.013, 0.79]}, // Receive the sample
+  {motion:[0.047, 0.034, 0.005, 0.93]}, // Reach for a carton
+  {motion:[0.016, 0.008, 0.018, 0.91]}, // Check a compact mirror
+  {motion:[0.046, -0.033, 0.01, 1.02]}, // Pack a shopping tote
+  {motion:[0.042, -0.009, 0.011, 0.83]}, // Present a payment card
+  {motion:[0.028, 0.009, 0.018, 0.83],cells:[10,11]}, // Read a carton / adjust a sleeve
+  {motion:[0.022, -0.008, 0.017, 1.07],cells:[12,13]} // Check a phone / gesture to the shelf
 ];
 
 // Hold one of two stances per person until the floor is opened again.
@@ -68,7 +68,9 @@ const shopperStances=[
   [[.030, .021, -.006], [-.039, -.057, .010]],
   [[.014, -.029, .004], [.103, .039, -.024]]
 ];
-const shopperAtlasColumns=14;
+// Per-pose frame width in metres for a one-metre-high portrait.
+const portraitAspects=[0.379688, 0.384375, 0.835938, 0.920312, 0.376563, 0.651563, 0.659375, 0.398438, 0.61875, 0.765625, 0.367969, 0.425, 0.389062, 0.751563];
+const shopperAtlasColumns=portraitAspects.length;
 
 class ShopperLayer{
   constructor(gl,onDetailReady,detailLimit){
@@ -80,14 +82,14 @@ class ShopperLayer{
     this.retryAfter=new Map();
     const vertex=`#version 300 es
       uniform vec4 pose; // floor x, floor y, height, facing (radians)
-      uniform int look,shadow,seated,detail;
+      uniform int look,shadow,detail;
       uniform float aspect,time;
       uniform vec4 motion; // forward lean, lift, lateral shift, tempo
       uniform vec3 stance; // forward lean, weight shift, waist height
       out vec2 uv;out vec3 world;out float proximity;
       ${projection}
       void main(){
-        vec2 corner=vec2(float(gl_VertexID%2),float(gl_VertexID/2)/(shadow==1?1.:32.));
+        vec2 corner=vec2(float(gl_VertexID%2),float(gl_VertexID/2));
         vec2 delta=eye.xy-pose.xy;
         float distanceToEye=length(delta);
         vec2 toEye=delta/max(.001,distanceToEye);
@@ -108,18 +110,13 @@ class ShopperLayer{
           vec2 side=vec2(facing.y,-facing.x);
           float phase=time*motion.w+float(look)*2.12+pose.x*1.47+pose.y*.54;
           float gesture=smoothstep(-.65,.85,sin(phase));
-          float y=corner.y;
-          float upper=smoothstep(.28,.91,y);
-          vec2 lean=facing*motion.x*gesture+side*motion.z*sin(phase*.5);
-          float legExtension=.064*smoothstep(.04,.53,y)*(1.-smoothstep(.53,.78,y));
-          // Keep the eyes, mouth and jaw on the same scale above the neck.
-          float neckLift=.018*smoothstep(.54,.82,y)-.10*max(0.,y-.82);
-          float z=y+neckLift+(seated==0?legExtension:0.);
-          float headWidth=mix(1.,.90,smoothstep(.75,.82,y));
-          vec2 weight=facing*stance.x+side*stance.y;
-          vec2 xy=pose.xy+across*(corner.x-.5)*pose.z*aspect*headWidth+upper*(lean+weight);
-          float waist=smoothstep(.12,.53,y)*(1.-.65*smoothstep(.53,.97,y));
-          world=vec3(xy,.015+z*pose.z+upper*motion.y*gesture+stance.z*waist);
+          // The photograph defines the anatomy. Rotate the whole figure about its feet.
+          vec2 tilt=facing*(stance.x*.22+motion.x*gesture*.18)
+                   +side*(stance.y*.22+motion.z*sin(phase*.5)*.18);
+          vec3 vertical=normalize(vec3(tilt,pose.z));
+          vec3 horizontal=normalize(right-vertical*dot(right,vertical));
+          world=vec3(pose.xy,.004)+pose.z*(vertical*corner.y
+                +horizontal*((corner.x-.5)*aspect));
         }
         gl_Position=project(world);
       }`;
@@ -146,7 +143,7 @@ class ShopperLayer{
         }
       }`;
     this.program=createProgram(gl,vertex,fragment);
-    this.u=uniforms(gl,this.program,'eye right up forward focal room pose aspect time motion stance look shadow seated detail portraits lightField displayField');
+    this.u=uniforms(gl,this.program,'eye right up forward focal room pose aspect time motion stance look shadow detail portraits lightField displayField');
     gl.useProgram(this.program);
     gl.uniform1i(this.u.portraits,12);gl.uniform1i(this.u.lightField,6);gl.uniform1i(this.u.displayField,9);
     this.vao=gl.createVertexArray();
@@ -158,7 +155,7 @@ class ShopperLayer{
       const cell=style.cells?.[variant]??person.look;
       const facing=person.facing+(variant?(person.look%2?-13:16):0);
       const stance=shopperStances[person.look%shopperStances.length][variant];
-      return {...person,variant,style,cell,angle:facing*Math.PI/180,stance,seated:person.look===3?1:0};
+      return {...person,variant,style,cell,angle:facing*Math.PI/180,stance};
     });
   }
   async loadPortrait(url){
@@ -166,6 +163,15 @@ class ShopperLayer{
     img.src=url;
     await img.decode();
     const gl=this.gl;
+    const maxSize=gl.getParameter(gl.MAX_TEXTURE_SIZE);
+    let source=img;
+    if(Math.max(img.width,img.height)>maxSize){
+      const scale=maxSize/Math.max(img.width,img.height);
+      source=document.createElement('canvas');
+      source.width=Math.round(img.width*scale);
+      source.height=Math.round(img.height*scale);
+      source.getContext('2d').drawImage(img,0,0,source.width,source.height);
+    }
     const texture=gl.createTexture();
     gl.activeTexture(gl.TEXTURE12);
     gl.bindTexture(gl.TEXTURE_2D,texture);
@@ -173,7 +179,7 @@ class ShopperLayer{
     const previous=gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);
     try{
-      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,source);
     }finally{gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,previous);}
     gl.generateMipmap(gl.TEXTURE_2D);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
@@ -184,7 +190,7 @@ class ShopperLayer{
   }
   load(){
     if(!this.ready){
-      this.ready=this.loadPortrait('assets/shoppers.webp?v=33').then(texture=>{
+      this.ready=this.loadPortrait('assets/shoppers.webp?v=34').then(texture=>{
         this.texture=texture;
       }).catch(error=>{this.ready=null;throw error;});
     }
@@ -203,7 +209,7 @@ class ShopperLayer{
     const cell=wanted.find(id=>!this.details.has(id)&&performance.now()>=(this.retryAfter.get(id)??0));
     if(cell===undefined)return;
     this.loadingDetail=true;
-    const url='assets/shopper-detail-'+String(cell).padStart(2,'0')+'.webp?v=33';
+    const url='assets/shopper-detail-'+String(cell).padStart(2,'0')+'.webp?v=34';
     this.loadPortrait(url).then(texture=>{
       if(this.details.size>=this.detailLimit){
         const unused=[...this.details.keys()].find(id=>!wanted.includes(id));
@@ -247,10 +253,10 @@ class ShopperLayer{
           gl.uniform1i(u.detail,detail?1:0);
         }
         gl.uniform4f(u.pose,person.x,person.y,person.height,person.angle);
-        gl.uniform1f(u.aspect,person.style.aspect);gl.uniform4fv(u.motion,person.style.motion);
+        gl.uniform1f(u.aspect,portraitAspects[person.cell]);gl.uniform4fv(u.motion,person.style.motion);
         gl.uniform3fv(u.stance,person.stance);
-        gl.uniform1i(u.look,person.cell);gl.uniform1i(u.seated,person.seated);
-        gl.drawArrays(gl.TRIANGLE_STRIP,0,shadow?4:66);
+        gl.uniform1i(u.look,person.cell);
+        gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       }
     }
     gl.disable(gl.BLEND);gl.activeTexture(gl.TEXTURE0);
