@@ -111,10 +111,11 @@ class ShopperLayer{
           float y=corner.y;
           float upper=smoothstep(.28,.91,y);
           vec2 lean=facing*motion.x*gesture+side*motion.z*sin(phase*.5);
-          float legExtension=.064*smoothstep(.04,.53,y)*(1.-smoothstep(.53,.89,y));
-          float neckLift=.023*smoothstep(.61,.85,y)*(1.-smoothstep(.85,1.,y));
+          float legExtension=.064*smoothstep(.04,.53,y)*(1.-smoothstep(.53,.78,y));
+          // Keep the eyes, mouth and jaw on the same scale above the neck.
+          float neckLift=.018*smoothstep(.54,.82,y)-.10*max(0.,y-.82);
           float z=y+neckLift+(seated==0?legExtension:0.);
-          float headWidth=mix(1.,.88,smoothstep(.79,.86,y));
+          float headWidth=mix(1.,.90,smoothstep(.75,.82,y));
           vec2 weight=facing*stance.x+side*stance.y;
           vec2 xy=pose.xy+across*(corner.x-.5)*pose.z*aspect*headWidth+upper*(lean+weight);
           float waist=smoothstep(.12,.53,y)*(1.-.65*smoothstep(.53,.97,y));
@@ -135,7 +136,8 @@ class ShopperLayer{
           pixel=vec4(.16,.115,.08,(1.-smoothstep(.04,1.,d))*.28*proximity);
         }else{
           vec4 image=texture(portraits,uv);
-          if(image.a<.07)discard;
+          if(image.a<.004)discard;
+          image.rgb/=image.a;
           vec3 normal=vec3(0.,0.,1.);
           vec3 viewDir=normalize(eye-world);
           vec3 base=image.rgb*vec3(.985,.972,.956);
@@ -167,7 +169,12 @@ class ShopperLayer{
     const texture=gl.createTexture();
     gl.activeTexture(gl.TEXTURE12);
     gl.bindTexture(gl.TEXTURE_2D,texture);
-    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
+    // Filter hair coverage and colour together through the entire mip chain.
+    const previous=gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);
+    try{
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
+    }finally{gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,previous);}
     gl.generateMipmap(gl.TEXTURE_2D);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
@@ -177,7 +184,7 @@ class ShopperLayer{
   }
   load(){
     if(!this.ready){
-      this.ready=this.loadPortrait('assets/shoppers.webp?v=32').then(texture=>{
+      this.ready=this.loadPortrait('assets/shoppers.webp?v=33').then(texture=>{
         this.texture=texture;
       }).catch(error=>{this.ready=null;throw error;});
     }
@@ -196,7 +203,7 @@ class ShopperLayer{
     const cell=wanted.find(id=>!this.details.has(id)&&performance.now()>=(this.retryAfter.get(id)??0));
     if(cell===undefined)return;
     this.loadingDetail=true;
-    const url='assets/shopper-detail-'+String(cell).padStart(2,'0')+'.webp?v=32';
+    const url='assets/shopper-detail-'+String(cell).padStart(2,'0')+'.webp?v=33';
     this.loadPortrait(url).then(texture=>{
       if(this.details.size>=this.detailLimit){
         const unused=[...this.details.keys()].find(id=>!wanted.includes(id));
@@ -224,6 +231,7 @@ class ShopperLayer{
       if(onScreen&&dx*dx+dy*dy<49)this.nearby=true;
       return onScreen;
     });
+    visible.sort((a,b)=>(b.x-a.x)*sin+(b.y-a.y)*cos);
     this.requestDetails(visible,cam,h);
     gl.useProgram(this.program);gl.bindVertexArray(this.vao);
     gl.uniform1f(u.time,time);
