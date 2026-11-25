@@ -97,18 +97,10 @@ if(musicEnabled){
   document.addEventListener('click',unlockMusic);
   document.addEventListener('keyup',unlockMusic);
 }
-const planLink=el('planFile');
-const floorPlans={
-  100:{url:planLink.getAttribute('href'),filename:planLink.download},
-  300:{url:planLink.dataset.plan300,filename:'300㎡_매대배치_수정평면도.pdf'}
-};
 async function openArea(id){
   if(loading&&id===area)return;
   const token=++generation;area=id;loading=true;resetInput();scene=null;last=0;
   document.querySelectorAll('[data-area]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.area===id)));
-  planLink.href=floorPlans[id].url;
-  planLink.download=floorPlans[id].filename;
-  planLink.querySelector('span').textContent=id+'㎡ 배치도 PDF';
   el('sizeLabel').textContent=id+'㎡';el('where').textContent='입구';el('tour').disabled=true;
   document.querySelector('.viewer').style.backgroundImage='url(assets/entrance-'+id+'.webp?v=31)';
   view.style.visibility='hidden';message('매장을 여는 중…');closeGuide();
@@ -287,61 +279,73 @@ el('closeGuide').onclick=closeGuide;
 const compactHeader=matchMedia('(max-width:760px)');
 compactHeader.addEventListener('change',()=>{closeGuide();requestRender();});
 const gallery=el('gallery');
-const galleryViews=[
-  {label:'입구 정면',file:'front'},
-  {label:'루네브라 전경',file:'angle'},
-  {label:'브랜드관 전경',file:'brand'},
-  {label:'수직 상공',file:'plan'},
-  {label:'정면 단면',file:'front-section'},
-  {label:'측면 단면',file:'side-section'}
-];
+const collections={
+  aerial:{
+    title:'조감도',archive:'aerial-originals.zip?v=31',count:12,
+    labels:['입구 정면','루네브라 전경','브랜드관 전경','수직 상공','정면 단면','측면 단면'],
+    image:(id,i)=>'assets/aerial-'+id+'-'+['front','angle','brand','plan','front-section','side-section'][i]+'.webp?v=31'
+  },
+  plan:{
+    title:'평면도',archive:'floor-plans.zip',count:2,labels:['매대 배치 평면도'],
+    image:id=>'assets/gallery/plan-'+id+'.webp'
+  },
+  interior:{
+    title:'실내전경',archive:'space-images.zip',count:14,
+    labels:['입구 전경','공용 체험·기획전','루네브라','중소 브랜드 A–D','종근당건강','WZ바이오','결제·포장'],
+    image:(id,i)=>interiorImage('interior',id,i),
+    thumbnail:(id,i)=>interiorImage('thumb',id,i)
+  }
+};
+function interiorImage(type,id,index){
+  return 'assets/gallery/'+type+'-'+id+'-'+String(index+1).padStart(2,'0')+'.webp';
+}
 const viewButtons=el('galleryViews'),galleryAreas=gallery.querySelectorAll('[data-gallery-area]');
-let galleryArea=100,galleryIndex=0;
+let galleryArea=100,galleryIndex=0,collection=collections.aerial;
 function selectGalleryView(index){
   galleryIndex=index;
-  const item=galleryViews[index],label=galleryArea+'㎡ · '+item.label;
-  el('galleryImage').src=viewButtons.children[index].firstElementChild.src;
-  el('galleryImage').alt=label;
+  const label=galleryArea+'㎡ · '+collection.labels[index];
+  const image=el('galleryImage');
+  image.src=collection.image(galleryArea,index);image.alt=label;
   el('galleryCaption').textContent=label;
-  el('galleryCount').textContent=(index+1)+' / '+galleryViews.length;
+  el('galleryCount').textContent=collection===collections.plan?'':(index+1)+' / '+collection.labels.length;
   Array.from(viewButtons.children).forEach((button,i)=>button.setAttribute('aria-pressed',String(index===i)));
 }
 function showGalleryArea(id,index){
   galleryArea=id;
   for(const button of galleryAreas)button.setAttribute('aria-pressed',String(+button.dataset.galleryArea===id));
-  galleryViews.forEach(({file},i)=>{
-    viewButtons.children[i].firstElementChild.src=gallerySources[id][file];
+  const plan=collection===collections.plan,pdf=el('galleryPdf');
+  pdf.hidden=!plan;
+  if(plan){pdf.href='assets/floor-plan-'+id+'.pdf?v=39';pdf.download=id+'㎡_매대배치_평면도.pdf';}
+  viewButtons.replaceChildren();viewButtons.hidden=plan;
+  if(!plan)collection.labels.forEach((label,i)=>{
+    const button=document.createElement('button'),thumb=new Image();
+    thumb.src=(collection.thumbnail||collection.image)(id,i);thumb.alt='';
+    button.append(thumb,document.createTextNode(label));
+    button.onclick=()=>selectGalleryView(i);viewButtons.append(button);
   });
   selectGalleryView(index);
 }
-const gallerySources={
-  100:{front:'assets/aerial-100-front.webp?v=31',angle:'assets/aerial-100-angle.webp?v=31',brand:'assets/aerial-100-brand.webp?v=31',plan:'assets/aerial-100-plan.webp?v=31',
-    'front-section':'assets/aerial-100-front-section.webp?v=31',
-    'side-section':'assets/aerial-100-side-section.webp?v=31'
-  },
-  300:{front:'assets/aerial-300-front.webp?v=31',angle:'assets/aerial-300-angle.webp?v=31',brand:'assets/aerial-300-brand.webp?v=31',plan:'assets/aerial-300-plan.webp?v=31',
-    'front-section':'assets/aerial-300-front-section.webp?v=31',
-    'side-section':'assets/aerial-300-side-section.webp?v=31'
-  }
-};
-galleryViews.forEach(({label},i)=>{
-  const button=document.createElement('button'),thumb=new Image();
-  thumb.alt='';
-  button.append(thumb,document.createTextNode(label));
-  button.onclick=()=>selectGalleryView(i);
-  viewButtons.append(button);
-});
 for(const button of galleryAreas)button.onclick=()=>showGalleryArea(+button.dataset.galleryArea,galleryIndex);
-el('openGallery').onclick=()=>{
+for(const button of document.querySelectorAll('button[data-collection]'))button.onclick=()=>{
   resetInput();
-  showGalleryArea(area,0);
-  gallery.showModal();
+  const key=button.dataset.collection;
+  collection=collections[key];gallery.dataset.collection=key;
+  el('galleryTitle').textContent=collection.title+' 갤러리';
+  const download=el('collectionDownload');
+  download.href='assets/'+collection.archive;download.download='한국우수상품전용관_'+collection.title+'.zip';
+  download.textContent=collection.title+' '+collection.count+'장 ↓';
+  el('galleryDownloadInfo').textContent='100㎡ · 300㎡ / PNG 원본';
+  showGalleryArea(area,0);gallery.showModal();
 };
 el('closeGallery').onclick=()=>gallery.close();
 gallery.addEventListener('keydown',e=>{
   if(e.key!=='ArrowRight'&&e.key!=='ArrowLeft')return;
   e.preventDefault();
-  const count=galleryViews.length;
+  if(collection===collections.plan||e.target.closest('.galleryAreas')){
+    showGalleryArea(galleryArea===100?300:100,galleryIndex);
+    gallery.querySelector('[data-gallery-area][aria-pressed="true"]').focus();return;
+  }
+  const count=collection.labels.length;
   selectGalleryView((galleryIndex+(e.key==='ArrowRight'?1:-1)+count)%count);
   viewButtons.children[galleryIndex].focus();
 });

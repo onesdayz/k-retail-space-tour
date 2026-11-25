@@ -80,17 +80,13 @@ dialog::backdrop{background:#09090bbd}dialog p{font-size:15px;line-height:1.6}di
 @media(max-height:580px){header{height:50px}aside{padding:10px 16px}.guideHead h2{font-size:17px}.planbox{margin:6px 0}#stops{gap:0}#stops button{padding:5px 10px;min-height:30px}footer{height:26px}#stick{width:90px;height:90px;bottom:10px}}
 @media(max-height:470px){.planbox{padding:5px 8px;margin:4px 0}.legend{margin:3px 0 0}#map{height:clamp(42px,19dvh,94px)}.zoom button{height:38px}}
 
-.guideDownloads{display:flex;flex-wrap:wrap;justify-content:center;gap:5px;margin-top:9px}
-.guideDownload:not([hidden]){
-  display:flex;align-items:center;justify-content:center;gap:8px;width:fit-content;
-  min-height:44px;max-width:100%;padding:0 12px;
-  border:1px solid var(--gold);border-radius:999px;background:#2b251a;color:var(--yellow);
-  font-size:13px;font-weight:700;text-decoration:none;
-}
-.guideDownload svg{width:16px;height:16px;flex:none}
-@media(hover:hover){.guideDownload:hover{background:#403421;border-color:var(--yellow)}}
-.guideDownload:active{background:#4d3d24}
-@media(max-height:470px){.guideDownloads{margin-top:4px;gap:3px}.guideDownload:not([hidden]){min-height:34px}}
+.guideCollections{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+.guideCollections button{display:flex;align-items:center;justify-content:space-between;gap:6px;
+  min-height:40px;padding:4px 12px;border:1px solid #756248;border-radius:8px;background:#28241e;color:var(--yellow);font-size:14px;font-weight:650}
+.guideCollections span{font-size:20px;font-weight:400;color:var(--gold)}
+@media(hover:hover){.guideCollections button:hover{background:#403421}}
+@media(max-height:470px){.guideCollections{margin-top:4px}.guideCollections button{min-height:32px}}
+
 
 .play{display:grid;justify-items:end;gap:8px}
 .play .iconControl{width:44px;height:44px;padding:0;justify-content:center;border-radius:50%}
@@ -134,3 +130,17 @@ dialog::backdrop{background:#09090bbd}dialog p{font-size:15px;line-height:1.6}di
 .galleryAreas button{min-height:34px;border-radius:999px;padding:0 10px;background:none;color:var(--muted);font-size:13px}
 .galleryAreas [aria-pressed=true]{background:#433822;color:var(--yellow)}
 @media(max-width:420px){.galleryHead{gap:4px}.galleryHead h2{font-size:17px}.galleryAreas button{padding-inline:8px}.galleryFoot span{max-width:46%;line-height:1.5}.galleryFoot a{white-space:nowrap}}
+
+#galleryViews[hidden],#galleryPdf[hidden]{display:none}
+#gallery[data-collection="interior"] #galleryViews{grid-template-columns:repeat(7,minmax(0,1fr))}
+#gallery[data-collection="interior"] #galleryViews button{white-space:normal;line-height:1.24}
+#gallery[data-collection="plan"] .galleryStage{height:clamp(165px,62dvh,680px)}
+#galleryPdf{margin-left:auto;color:var(--yellow);font-size:13px}
+.galleryDownloads{display:flex;flex-wrap:wrap;gap:6px}
+.galleryFoot #allPhotos{background:transparent;border:1px solid var(--gold);color:var(--yellow)}
+@media(max-width:620px){
+ #gallery[data-collection="interior"] #galleryViews{display:flex;overflow-x:auto}
+ #gallery[data-collection="interior"] #galleryViews button{flex:0 0 94px}
+ .galleryFoot{align-items:flex-start;flex-direction:column;gap:5px}
+ .galleryFoot span{max-width:none}.galleryFoot a{font-size:12px;min-height:36px;padding:0 9px}
+}

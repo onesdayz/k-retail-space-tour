@@ -60,14 +60,14 @@ const shopperLooks=[
   {motion:[0.042, -0.009, 0.011, 0.83]}, // Present a payment card
   {motion:[0.028, 0.009, 0.018, 0.83],cells:[10,11]}, // Read a carton / adjust a sleeve
   {motion:[0.022, -0.008, 0.017, 1.07],cells:[12,13]}, // Check a phone / gesture to the shelf
-  {motion:[.018,.008,.012,.92]}, // Read a label
-  {motion:[.025,.012,.009,.87]}, // Examine a bottle
+  {motion:[.018,.008,.012,.92]}, // Smell a perfume blotter
+  {motion:[.025,.012,.009,.87]}, // Read a skincare carton
   {motion:[.019,.009,.014,.96]}, // Compare two products
   {motion:[.036,.014,.015,.90]}, // Point to the shelf
-  {motion:[.019,.007,.013,.93]}, // Browse the product list
+  {motion:[.019,.007,.013,.93]}, // Inspect a serum vial against the light
   {motion:[.021,.012,.014,.99]}, // Test a swatch
-  {motion:[.028,.009,.012,.91]}, // Check a shopping list
-  {motion:[.017,.011,.009,.95]}  // Consult a phone
+  {motion:[.028,.009,.012,.91]}, // Lower a purchase into the shopping bag
+  {motion:[.017,.011,.009,.95]}  // Compare two vitamin jars
 ];
 
 // Hold one of two stances per person until the floor is opened again.
@@ -79,7 +79,7 @@ const shopperStances=[
 // Per-pose frame width in metres for a one-metre-high portrait.
 const portraitAspects=[0.379688, 0.384375, 0.835938, 0.920312, 0.376563, 0.651563, 0.659375, 0.398438, 0.61875, 0.765625, 0.367969, 0.425, 0.389062, 0.751563];
 const shopperAtlasColumns=portraitAspects.length;
-const additionalAspects=[.343797,.380962,.417401,.489823,.397333,.385949,.484465,.371015];
+const additionalAspects=[0.307812,0.329688,0.36875,0.41875,0.351562,0.339062,0.378125,0.326562];
 const primaryLookCount=shopperLooks.length-additionalAspects.length;
 
 class ShopperLayer{
@@ -208,7 +208,7 @@ class ShopperLayer{
     if(!this.ready){
       this.ready=Promise.all([
         this.loadPortrait('assets/shoppers.webp?v=34'),
-        this.loadPortrait('assets/shoppers-additional.webp')
+        this.loadPortrait('assets/shoppers-additional.webp?v=38')
       ]).then(([texture,additionalTexture])=>{
         this.texture=texture;
         this.additionalTexture=additionalTexture;
@@ -221,7 +221,6 @@ class ShopperLayer{
     // Allocate detail to the largest on-screen figures first, including when zoomed.
     const sizes=new Map();
     for(const person of visible){
-      if(person.additional)continue;
       const distance=Math.max(.25,Math.hypot(person.x-cam.x,person.y-cam.y));
       const pixels=h*(cam.zoom||1)*person.height/(1.226*distance);
       if(pixels>200)sizes.set(person.cell,Math.max(sizes.get(person.cell)||0,pixels));
