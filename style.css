@@ -144,3 +144,12 @@ dialog::backdrop{background:#09090bbd}dialog p{font-size:15px;line-height:1.6}di
  .galleryFoot{align-items:flex-start;flex-direction:column;gap:5px}
  .galleryFoot span{max-width:none}.galleryFoot a{font-size:12px;min-height:36px;padding:0 9px}
 }
+
+.bundleDownload{display:inline-flex;flex:none;align-items:center;gap:6px;align-self:stretch;
+  color:var(--yellow);font-weight:700;text-decoration:none;white-space:nowrap}
+.bundleDownload svg{width:16px;height:16px}.bundleDownload span{font-weight:500;color:var(--muted)}
+.shortHint{display:none}
+@media(hover:hover){.bundleDownload:hover{text-decoration:underline}}
+@media(max-width:900px){.floorHint{display:none}}
+@media(max-width:760px){footer{justify-content:space-between;padding-inline:12px}}
+@media(max-width:540px){.hintMobile .wideHint{display:none}.hintMobile .shortHint{display:inline}}

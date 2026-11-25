@@ -1,4 +1,4 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="icon" href="assets/favicon.ico" sizes="16x16 32x32 48x48"><link rel="icon" type="image/svg+xml" sizes="any" href="assets/pavilion.svg"><link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png"><link rel="manifest" href="site.webmanifest"><meta name="theme-color" content="#141416"><title>한국우수상품전용관 · 공간 둘러보기</title><link rel="stylesheet" href="style.css?v=39"></head>
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="icon" href="assets/favicon.ico" sizes="16x16 32x32 48x48"><link rel="icon" type="image/svg+xml" sizes="any" href="assets/pavilion.svg"><link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png"><link rel="manifest" href="site.webmanifest"><meta name="theme-color" content="#141416"><title>한국우수상품전용관 · 공간 둘러보기</title><link rel="stylesheet" href="style.css?v=40"></head>
 <body><header><div class="identity"><span class="mark" aria-hidden="true"><img src="assets/pavilion.svg" width="44" height="44" alt=""></span><div><h1>한국우수상품전용관</h1><p>실내 공간 투어</p></div></div><div class="areas" role="group" aria-label="매장 면적"><button data-area="100" aria-pressed="true">100<span>㎡</span></button><button data-area="300" aria-pressed="false">300<span>㎡</span></button></div></header>
 <main><section class="viewer" aria-label="매장 실내"><canvas id="view" tabindex="0" aria-label="걸어 다니는 3D 매장. W A S D로 이동하고 화면을 드래그해 둘러보세요."></canvas>
 <div id="load" role="status">매장을 여는 중…</div>
@@ -17,7 +17,12 @@
   <button data-collection="interior" aria-haspopup="dialog" aria-controls="gallery">실내전경 <span aria-hidden="true">›</span></button>
 </div></div>
 <nav aria-label="구역 바로가기" id="stops"></nav></aside></main>
-<footer><button class="hintDesktop" aria-label="조작 방법 열기" aria-haspopup="dialog"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 이동 <em></em> 화면 드래그로 둘러보기</button><button class="hintMobile" aria-label="조작 방법 열기" aria-haspopup="dialog">패드를 밀어 이동 · 두 손가락으로 확대·축소</button><span class="floorHint">공간 안내 지도의 빈 통로를 누르면 이동합니다</span></footer>
+<footer><button class="hintDesktop" aria-label="조작 방법 열기" aria-haspopup="dialog"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 이동 <em></em> 화면 드래그로 둘러보기</button><button class="hintMobile" aria-label="조작 방법 열기" aria-haspopup="dialog">패드를 밀어 이동 · 두 손가락으로 확대·축소</button><span class="floorHint">공간 안내 지도의 빈 통로를 누르면 이동합니다</span>
+  <a class="bundleDownload" href="https://github.com/onesdayz/k-retail-space-tour/releases/download/gallery-20261125/retail-gallery-28.zip" aria-label="100㎡와 300㎡의 실내전경·조감도·평면도 전체 28장 내려받기" title="100㎡·300㎡ 실내전경, 조감도, 평면도 · PNG 28장 · ZIP 119 MB">
+    <svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v10m-4-4 4 4 4-4M3 13v4h14v-4"/></svg>
+    전체 이미지 내려받기 <span>28장</span>
+  </a>
+</footer>
 <dialog id="gallery" aria-labelledby="galleryTitle">
   <div class="galleryHead"><h2 id="galleryTitle">조감도 갤러리</h2>
     <div class="galleryAreas" role="group" aria-label="갤러리 면적"><button data-gallery-area="100">100㎡</button><button data-gallery-area="300">300㎡</button></div><button id="closeGallery" aria-label="갤러리 닫기" autofocus>×</button></div>
