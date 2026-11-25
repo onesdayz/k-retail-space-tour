@@ -1,48 +1,48 @@
 // Metres on the floor plan. Facing uses the same clockwise-from-north angle as the camera.
-const paymentLook=9;
 // Customer side of the POS counter, facing the terminal.
 const checkoutPose={
   100:{x:6.88,y:2.50,facing:206},
   300:{x:10.85,y:4.86,facing:180}
 };
+// One placement per shopper identity, indexed in the same order as shopperLooks.
 const shoppersByArea={
   100:[
-    {look:0,x:2.43,y:2.36,facing:212,height:1.64},
-    {look:1,x:1.86,y:3.13,facing:4,height:1.63},
-    {look:2,x:6.08,y:10.25,facing:75,height:1.67},
-    {look:5,x:6.96,y:10.52,facing:255,height:1.61},
-    {look:3,x:6.91,y:6.77,facing:90,height:1.04},
-    {look:6,x:1.04,y:8.01,facing:264,height:1.69},
-    {look:4,x:6.85,y:4.69,facing:83,height:1.67},
-    {look:10,x:1.36,y:5.54,facing:270,height:1.82},
-    {look:1,x:1.20,y:10.64,facing:268,height:1.66},
-    {look:7,x:2.26,y:11.02,facing:339,height:1.71},
-    {look:11,x:5.75,y:11.41,facing:29,height:1.80},
-    {look:6,x:5.37,y:8.33,facing:146,height:1.68},
-    {look:8,x:5.61,y:4.83,facing:157,height:1.66},
-    {...checkoutPose[100],look:paymentLook,height:1.65}
+    {x:2.43,y:2.36,facing:212,height:1.64},
+    {x:1.86,y:3.13,facing:4,height:1.63},
+    {x:6.08,y:10.25,facing:75,height:1.67},
+    {x:6.91,y:6.77,facing:90,height:1.04},
+    {x:6.85,y:4.69,facing:83,height:1.67},
+    {x:6.96,y:10.52,facing:255,height:1.61},
+    {x:1.04,y:8.01,facing:264,height:1.69},
+    {x:2.26,y:11.02,facing:339,height:1.71},
+    {x:5.61,y:4.83,facing:157,height:1.66},
+    {...checkoutPose[100],height:1.65},
+    {x:1.36,y:5.54,facing:270,height:1.82},
+    {x:5.75,y:11.41,facing:29,height:1.80},
+    {x:1.20,y:10.64,facing:268,height:1.66},
+    {x:5.37,y:8.33,facing:146,height:1.68}
   ],
   300:[
-    {look:0,x:4.65,y:2.39,facing:220,height:1.64},
-    {look:1,x:3.52,y:5.61,facing:270,height:1.63},
-    {look:2,x:7.08,y:10.17,facing:29,height:1.67},
-    {look:5,x:7.53,y:11.02,facing:209,height:1.61},
-    {look:3,x:12.93,y:13.72,facing:91,height:1.01},
-    {look:4,x:3.49,y:14.29,facing:235,height:1.67},
-    {look:6,x:1.1,y:9.25,facing:273,height:1.69},
-    {look:7,x:12.85,y:18.94,facing:90,height:1.68},
-    {look:8,x:9.76,y:7.66,facing:38,height:1.66},
-    {...checkoutPose[300],look:paymentLook,height:1.65},
-    {look:10,x:1.30,y:5.85,facing:270,height:1.83},
-    {look:7,x:1.42,y:10.76,facing:275,height:1.71},
-    {look:1,x:5.12,y:11.22,facing:12,height:1.66},
-    {look:6,x:1.67,y:17.84,facing:310,height:1.69},
-    {look:11,x:6.92,y:16.32,facing:96,height:1.80},
-    {look:0,x:10.18,y:16.24,facing:14,height:1.64},
-    {look:4,x:11.75,y:11.31,facing:353,height:1.69},
-    {look:2,x:7.92,y:6.63,facing:13,height:1.67},
-    {look:10,x:7.13,y:1.55,facing:304,height:1.82},
-    {look:8,x:7.04,y:20.04,facing:7,height:1.66}
+    {x:4.65,y:2.39,facing:220,height:1.64},
+    {x:3.52,y:5.61,facing:270,height:1.63},
+    {x:7.08,y:10.17,facing:29,height:1.67},
+    {x:12.93,y:13.72,facing:91,height:1.01},
+    {x:3.49,y:14.29,facing:235,height:1.67},
+    {x:7.53,y:11.02,facing:209,height:1.61},
+    {x:1.1,y:9.25,facing:273,height:1.69},
+    {x:12.85,y:18.94,facing:90,height:1.68},
+    {x:9.76,y:7.66,facing:38,height:1.66},
+    {...checkoutPose[300],height:1.65},
+    {x:1.30,y:5.85,facing:270,height:1.83},
+    {x:6.92,y:16.32,facing:96,height:1.80},
+    {x:5.12,y:11.22,facing:12,height:1.66},
+    {x:1.67,y:17.84,facing:310,height:1.69},
+    {x:1.42,y:10.76,facing:275,height:1.71},
+    {x:10.18,y:16.24,facing:14,height:1.64},
+    {x:11.75,y:11.31,facing:353,height:1.69},
+    {x:7.92,y:6.63,facing:13,height:1.67},
+    {x:7.04,y:20.04,facing:7,height:1.66},
+    {x:7.13,y:1.55,facing:304,height:1.82}
   ]
 };
 
@@ -59,7 +59,15 @@ const shopperLooks=[
   {motion:[0.046, -0.033, 0.01, 1.02]}, // Pack a shopping tote
   {motion:[0.042, -0.009, 0.011, 0.83]}, // Present a payment card
   {motion:[0.028, 0.009, 0.018, 0.83],cells:[10,11]}, // Read a carton / adjust a sleeve
-  {motion:[0.022, -0.008, 0.017, 1.07],cells:[12,13]} // Check a phone / gesture to the shelf
+  {motion:[0.022, -0.008, 0.017, 1.07],cells:[12,13]}, // Check a phone / gesture to the shelf
+  {motion:[.018,.008,.012,.92]}, // Read a label
+  {motion:[.025,.012,.009,.87]}, // Examine a bottle
+  {motion:[.019,.009,.014,.96]}, // Compare two products
+  {motion:[.036,.014,.015,.90]}, // Point to the shelf
+  {motion:[.019,.007,.013,.93]}, // Browse the product list
+  {motion:[.021,.012,.014,.99]}, // Test a swatch
+  {motion:[.028,.009,.012,.91]}, // Check a shopping list
+  {motion:[.017,.011,.009,.95]}  // Consult a phone
 ];
 
 // Hold one of two stances per person until the floor is opened again.
@@ -71,6 +79,8 @@ const shopperStances=[
 // Per-pose frame width in metres for a one-metre-high portrait.
 const portraitAspects=[0.379688, 0.384375, 0.835938, 0.920312, 0.376563, 0.651563, 0.659375, 0.398438, 0.61875, 0.765625, 0.367969, 0.425, 0.389062, 0.751563];
 const shopperAtlasColumns=portraitAspects.length;
+const additionalAspects=[.343797,.380962,.417401,.489823,.397333,.385949,.484465,.371015];
+const primaryLookCount=shopperLooks.length-additionalAspects.length;
 
 class ShopperLayer{
   constructor(gl,onDetailReady,detailLimit){
@@ -105,8 +115,11 @@ class ShopperLayer{
           float angle=acos(clamp(dot(facing,toEye),-1.,1.));
           float row=floor(angle/0.78539816+.5);
           float u=dot(facing,across)<0.?1.-corner.x:corner.x;
+          bool additional=look>=${shopperAtlasColumns};
+          float column=additional?float(look-${shopperAtlasColumns}):float(look);
+          float columns=additional?${additionalAspects.length}.:${shopperAtlasColumns}.;
           uv=detail==1 ? vec2((row+u)/5.,1.-corner.y)
-                       : (vec2(float(look),row)+vec2(u,1.-corner.y))/vec2(${shopperAtlasColumns}.,5.);
+                       : (vec2(column,row)+vec2(u,1.-corner.y))/vec2(columns,5.);
           vec2 side=vec2(facing.y,-facing.x);
           float phase=time*motion.w+float(look)*2.12+pose.x*1.47+pose.y*.54;
           float gesture=smoothstep(-.65,.85,sin(phase));
@@ -149,13 +162,16 @@ class ShopperLayer{
     this.vao=gl.createVertexArray();
   }
   selectArea(area){
-    this.people=shoppersByArea[area].map(person=>{
+    this.people=shoppersByArea[area].map((person,look)=>{
       const variant=Math.random()<.5?0:1;
-      const style=shopperLooks[person.look];
-      const cell=style.cells?.[variant]??person.look;
-      const facing=person.facing+(variant?(person.look%2?-13:16):0);
-      const stance=shopperStances[person.look%shopperStances.length][variant];
-      return {...person,variant,style,cell,angle:facing*Math.PI/180,stance};
+      const style=shopperLooks[look];
+      const additional=look>=primaryLookCount;
+      const column=additional?look-primaryLookCount:(style.cells?.[variant]??look);
+      const cell=additional?shopperAtlasColumns+column:column;
+      const aspect=(additional?additionalAspects:portraitAspects)[column];
+      const facing=person.facing+(variant?(look%2?-13:16):0);
+      const stance=shopperStances[look%shopperStances.length][variant];
+      return {...person,look,variant,style,cell,additional,aspect,angle:facing*Math.PI/180,stance};
     });
   }
   async loadPortrait(url){
@@ -190,8 +206,12 @@ class ShopperLayer{
   }
   load(){
     if(!this.ready){
-      this.ready=this.loadPortrait('assets/shoppers.webp?v=34').then(texture=>{
+      this.ready=Promise.all([
+        this.loadPortrait('assets/shoppers.webp?v=34'),
+        this.loadPortrait('assets/shoppers-additional.webp')
+      ]).then(([texture,additionalTexture])=>{
         this.texture=texture;
+        this.additionalTexture=additionalTexture;
       }).catch(error=>{this.ready=null;throw error;});
     }
     return this.ready;
@@ -201,6 +221,7 @@ class ShopperLayer{
     // Allocate detail to the largest on-screen figures first, including when zoomed.
     const sizes=new Map();
     for(const person of visible){
+      if(person.additional)continue;
       const distance=Math.max(.25,Math.hypot(person.x-cam.x,person.y-cam.y));
       const pixels=h*(cam.zoom||1)*person.height/(1.226*distance);
       if(pixels>200)sizes.set(person.cell,Math.max(sizes.get(person.cell)||0,pixels));
@@ -249,11 +270,11 @@ class ShopperLayer{
       for(const person of visible){
         if(!shadow){
           const detail=this.details.get(person.cell);
-          gl.bindTexture(gl.TEXTURE_2D,detail||this.texture);
+          gl.bindTexture(gl.TEXTURE_2D,detail||(person.additional?this.additionalTexture:this.texture));
           gl.uniform1i(u.detail,detail?1:0);
         }
         gl.uniform4f(u.pose,person.x,person.y,person.height,person.angle);
-        gl.uniform1f(u.aspect,portraitAspects[person.cell]);gl.uniform4fv(u.motion,person.style.motion);
+        gl.uniform1f(u.aspect,person.aspect);gl.uniform4fv(u.motion,person.style.motion);
         gl.uniform3fv(u.stance,person.stance);
         gl.uniform1i(u.look,person.cell);
         gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
